@@ -27,6 +27,10 @@ SDK_JOBS=${SDK_JOBS:-$(nproc)}
 }
 [[ "$SDK_JOBS" =~ ^[1-9][0-9]*$ ]] || { echo 'SDK_JOBS must be a positive integer.' >&2; exit 1; }
 
+# The pinned image predates current source-host certificate chains. Refresh
+# distribution trust roots before fetching sources; TLS verification stays on.
+dnf -y upgrade ca-certificates
+update-ca-trust
 dnf -y --setopt=install_weak_deps=False --enablerepo=powertools install \
     gcc-toolset-12-gcc-c++ cmake ninja-build make perl python3 pkgconf-pkg-config \
     curl tar xz bzip2 gzip patch file binutils findutils which \
