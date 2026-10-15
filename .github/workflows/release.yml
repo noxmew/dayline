@@ -32,13 +32,16 @@ jobs:
     timeout-minutes: 90
     env:
       RUNTIME_BUILD_IMAGE: rockylinux:8@sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c
-      SDK_CACHE_ROOT: ${{ runner.temp }}/dayline-sdk
       DAYLINE_BUILD_CONTAINER: dayline-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
     steps:
       - name: Check out the pushed source commit
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Define the runner-local SDK directory
+        run: |
+          printf 'SDK_CACHE_ROOT=%s/dayline-sdk\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
 
       - name: Restore the architecture-specific runtime SDK
         id: sdk-cache
