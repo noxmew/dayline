@@ -20,54 +20,58 @@ QList<DavItem> parseDav(const QByteArray &body, QString *error)
 {
     QXmlStreamReader xml(body);
     QList<DavItem> result;
-    while (xml.readNextStartElement()) {
-        if (xml.name() != QStringLiteral("multistatus")) { *error = "iCloud 返回了无效的日历响应。"; return {}; }
-        while (xml.readNextStartElement()) {
-            if (xml.name() != QStringLiteral("response")) { xml.skipCurrentElement(); continue; }
-            DavItem item;
-            while (xml.readNextStartElement()) {
-                if (xml.name() == QStringLiteral("href")) item.href = xml.readElementText();
-                else if (xml.name() == QStringLiteral("propstat")) {
-                    QMap<QString, QString> properties;
-                    QSet<QString> types, privileges;
-                    QString status;
-                    bool componentsSeen = false, hasEvents = false;
-                    while (xml.readNextStartElement()) {
-                        if (xml.name() == QStringLiteral("status")) status = xml.readElementText();
-                        else if (xml.name() == QStringLiteral("prop")) {
-                            while (xml.readNextStartElement()) {
-                                const QString name = xml.name().toString();
-                                if (name == "resourcetype" || name == "current-user-privilege-set" || name == "supported-calendar-component-set") {
-                                    if (name == "supported-calendar-component-set") componentsSeen = true;
-                                    int depth = 1;
-                                    while (depth && !xml.atEnd()) {
-                                        xml.readNext();
-                                        if (xml.isStartElement()) {
-                                            ++depth;
-                                            if (name == "resourcetype") types.insert(xml.name().toString());
-                                            if (name == "current-user-privilege-set") privileges.insert(xml.name().toString());
-                                            if (name == "supported-calendar-component-set" && xml.name() == QStringLiteral("comp") &&
-                                                xml.attributes().value("name") == QStringLiteral("VEVENT")) hasEvents = true;
-                                        } else if (xml.isEndElement()) --depth;
-                                    }
-                                } else properties[name] = xml.readElementText(QXmlStreamReader::IncludeChildElements).trimmed();
-                            }
-                        } else xml.skipCurrentElement();
-                    }
-                    if (status.contains(" 200 ")) {
-                        item.properties.insert(properties); item.types.unite(types); item.privileges.unite(privileges);
-                        if (componentsSeen) item.events = hasEvents;
-                    } else if (!status.contains(" 404 ")) { *error = "iCloud 未能完整返回日历属性，已停止本轮同步。"; return {}; }
-                } else if (xml.name() == QStringLiteral("status")) {
-                    const auto status = xml.readElementText();
-                    if (!status.contains(" 200 ")) { *error = "iCloud 返回了不完整的资源清单，已停止本轮同步。"; return {}; }
-                } else xml.skipCurrentElement();
-            }
-            item.calendar = item.types.contains("calendar"); item.collection = item.types.contains("collection");
-            if (item.href.isEmpty()) { *error = "iCloud 日历响应缺少资源地址。"; return {}; }
-            result.append(item);
-        }
+    if (!xml.readNextStartElement()) { *error = "iCloud 日历响应无法完整解析，已保留本机数据。"; return {}; }
+    if (xml.name() != QStringLiteral("multistatus") || xml.namespaceUri() != QStringLiteral("DAV:")) {
+        *error = "iCloud 返回了无效的日历响应。"; return {};
     }
+    while (xml.readNextStartElement()) {
+        if (xml.name() != QStringLiteral("response")) { xml.skipCurrentElement(); continue; }
+        DavItem item;
+        while (xml.readNextStartElement()) {
+            if (xml.name() == QStringLiteral("href")) item.href = xml.readElementText();
+            else if (xml.name() == QStringLiteral("propstat")) {
+                QMap<QString, QString> properties;
+                QSet<QString> types, privileges;
+                QString status;
+                bool componentsSeen = false, hasEvents = false;
+                while (xml.readNextStartElement()) {
+                    if (xml.name() == QStringLiteral("status")) status = xml.readElementText();
+                    else if (xml.name() == QStringLiteral("prop")) {
+                        while (xml.readNextStartElement()) {
+                            const QString name = xml.name().toString();
+                            if (name == "resourcetype" || name == "current-user-privilege-set" || name == "supported-calendar-component-set") {
+                                if (name == "supported-calendar-component-set") componentsSeen = true;
+                                int depth = 1;
+                                while (depth && !xml.atEnd()) {
+                                    xml.readNext();
+                                    if (xml.isStartElement()) {
+                                        ++depth;
+                                        if (name == "resourcetype") types.insert(xml.name().toString());
+                                        if (name == "current-user-privilege-set") privileges.insert(xml.name().toString());
+                                        if (name == "supported-calendar-component-set" && xml.name() == QStringLiteral("comp") &&
+                                            xml.attributes().value("name") == QStringLiteral("VEVENT")) hasEvents = true;
+                                    } else if (xml.isEndElement()) --depth;
+                                }
+                            } else properties[name] = xml.readElementText(QXmlStreamReader::IncludeChildElements).trimmed();
+                        }
+                    } else xml.skipCurrentElement();
+                }
+                if (status.contains(" 200 ")) {
+                    item.properties.insert(properties); item.types.unite(types); item.privileges.unite(privileges);
+                    if (componentsSeen) item.events = hasEvents;
+                } else if (!status.contains(" 404 ")) { *error = "iCloud 未能完整返回日历属性，已停止本轮同步。"; return {}; }
+            } else if (xml.name() == QStringLiteral("status")) {
+                const auto status = xml.readElementText();
+                if (!status.contains(" 200 ")) { *error = "iCloud 返回了不完整的资源清单，已停止本轮同步。"; return {}; }
+            } else xml.skipCurrentElement();
+        }
+        item.calendar = item.types.contains("calendar"); item.collection = item.types.contains("collection");
+        if (item.href.isEmpty()) { *error = "iCloud 日历响应缺少资源地址。"; return {}; }
+        result.append(item);
+    }
+    // readNextStartElement() passes EndDocument while looking for a sibling root.
+    // Finish the single multistatus document without reading beyond its end.
+    while (!xml.atEnd()) xml.readNext();
     if (xml.hasError()) { *error = "iCloud 日历响应无法完整解析，已保留本机数据。"; return {}; }
     return result;
 }
