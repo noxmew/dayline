@@ -30,8 +30,11 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
     env:
-      RUNTIME_BUILD_IMAGE: rockylinux:8@sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c
+      SDK_IMAGE_NAME: ghcr.io/noxmew/dayline-build
       DAYLINE_BUILD_CONTAINER: dayline-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
     steps:
       - name: Check out the pushed source commit
@@ -39,38 +42,238 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Define the runner-local SDK directory
+      - name: Identify the architecture-specific SDK recipe
+        id: sdk-recipe
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
         run: |
+          [[ "$(dpkg --print-architecture)" == "$PACKAGE_ARCH" ]]
           printf 'SDK_CACHE_ROOT=%s/dayline-sdk\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
 
-      - name: Restore the architecture-specific runtime SDK
+          digest = hashlib.sha256()
+          for name in ("scripts/build-runtime-sdk.sh", "platform/linux/Dockerfile.runtime-sdk"):
+              content = Path(name).read_bytes()
+              digest.update(len(content).to_bytes(8, "big"))
+              digest.update(content)
+          recipe = digest.hexdigest()
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"recipe={recipe}", file=output)
+              print(f"tag=sdk-{recipe}-{os.environ['PACKAGE_ARCH']}", file=output)
+          PY
+
+      - name: Authenticate to this repository's container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Resolve an existing SDK image to its digest
+        id: existing-sdk-image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_IMAGE_TAG: ${{ steps.sdk-recipe.outputs.tag }}
+        run: |
+          # Packages REST also handles the first publication, when GHCR may
+          # deny a registry token for a package that does not exist yet.
+          cat > "$RUNNER_TEMP/dayline-probe-sdk-image.py" <<'PY'
+          import json
+          import os
+          import re
+          from urllib.error import HTTPError
+          from urllib.parse import quote
+          from urllib.request import Request, urlopen
+
+          api = os.environ["GITHUB_API_URL"].rstrip("/")
+          image = os.environ["SDK_IMAGE_NAME"]
+          if not image.startswith("ghcr.io/"):
+              raise SystemExit("Unexpected SDK registry")
+          owner, package = image[len("ghcr.io/"):].split("/", 1)
+          headers = {
+              "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def fetch(url, allow_missing=False):
+              if not url.startswith(api + "/"):
+                  raise SystemExit("Unexpected Packages pagination URL")
+              try:
+                  with urlopen(Request(url, headers=headers), timeout=30) as response:
+                      return json.load(response), response.headers.get("Link", "")
+              except HTTPError as error:
+                  if error.code == 404 and allow_missing:
+                      return None, ""
+                  raise SystemExit(f"Packages lookup failed: HTTP {error.code}") from error
+
+          account, _ = fetch(api + "/users/" + quote(owner, safe=""))
+          if account.get("type") == "Organization":
+              account_path = "orgs"
+          elif account.get("type") == "User":
+              account_path = "users"
+          else:
+              raise SystemExit("Unsupported package owner type")
+          url = (f"{api}/{account_path}/{quote(owner, safe='')}/packages/container/"
+                 f"{quote(package, safe='')}/versions?per_page=100")
+          matches = set()
+          seen = set()
+          first_page = True
+          while url:
+              if url in seen:
+                  raise SystemExit("Repeated Packages pagination URL")
+              seen.add(url)
+              versions, link = fetch(url, allow_missing=first_page)
+              if versions is None:
+                  break
+              if not isinstance(versions, list):
+                  raise SystemExit("Unexpected Packages versions response")
+              for version in versions:
+                  tags = version.get("metadata", {}).get("container", {}).get("tags", [])
+                  if os.environ["SDK_IMAGE_TAG"] in tags:
+                      digest = version.get("name", "")
+                      if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest):
+                          raise SystemExit("Invalid SDK image manifest digest")
+                      matches.add(digest)
+              next_page = re.search(r'<([^>]+)>;\s*rel="next"', link)
+              url = next_page.group(1) if next_page else None
+              first_page = False
+          if len(matches) > 1:
+              raise SystemExit("SDK recipe tag points to multiple image digests")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print("exists=" + ("true" if matches else "false"), file=output)
+              if matches:
+                  print("digest=" + next(iter(matches)), file=output)
+          print("Found the SDK recipe image" if matches else "SDK recipe image is absent")
+          PY
+          python3 "$RUNNER_TEMP/dayline-probe-sdk-image.py"
+
+      - name: Restore the existing SDK cache as a cold-build seed
+        if: steps.existing-sdk-image.outputs.exists == 'false'
         id: sdk-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.SDK_CACHE_ROOT }}/prefix
           key: runtime-sdk-rocky8-9794037624aaa621-${{ matrix.arch }}-${{ hashFiles('scripts/build-runtime-sdk.sh') }}
 
-      - name: Start the pinned native glibc 2.28 build container
+      - name: Prepare the optional SDK seed context
+        if: steps.existing-sdk-image.outputs.exists == 'false'
         run: |
-          [[ "$(dpkg --print-architecture)" == '${{ matrix.arch }}' ]]
           mkdir -p "$SDK_CACHE_ROOT/prefix"
+
+      - name: Set up the native SDK image builder
+        if: steps.existing-sdk-image.outputs.exists == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache only the system toolchain image layers
+        if: steps.existing-sdk-image.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: scripts
+          file: platform/linux/Dockerfile.runtime-sdk
+          target: builddeps
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=dayline-builddeps-${{ matrix.arch }}
+          cache-to: type=gha,scope=dayline-builddeps-${{ matrix.arch }},mode=max
+
+      - name: Build the complete SDK image without application secrets
+        if: steps.existing-sdk-image.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: scripts
+          file: platform/linux/Dockerfile.runtime-sdk
+          target: runtime-sdk
+          platforms: linux/${{ matrix.arch }}
+          build-contexts: |
+            sdkseed=${{ env.SDK_CACHE_ROOT }}/prefix
+          build-args: |
+            DAYLINE_SDK_RECIPE=${{ steps.sdk-recipe.outputs.recipe }}
+          tags: ${{ env.SDK_IMAGE_NAME }}:${{ steps.sdk-recipe.outputs.tag }}
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=dayline-builddeps-${{ matrix.arch }}
+
+      - name: Recheck the recipe tag before publishing a cold build
+        if: steps.existing-sdk-image.outputs.exists == 'false'
+        id: rechecked-sdk-image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_IMAGE_TAG: ${{ steps.sdk-recipe.outputs.tag }}
+        run: python3 "$RUNNER_TEMP/dayline-probe-sdk-image.py"
+
+      - name: Publish a missing recipe and record the pushed manifest digest
+        if: steps.existing-sdk-image.outputs.exists == 'false' && steps.rechecked-sdk-image.outputs.exists == 'false'
+        id: published-sdk-image
+        env:
+          SDK_IMAGE_TAG: ${{ steps.sdk-recipe.outputs.tag }}
+        run: |
+          docker push "$SDK_IMAGE_NAME:$SDK_IMAGE_TAG"
+          digest="$(docker image inspect "$SDK_IMAGE_NAME:$SDK_IMAGE_TAG" | \
+            jq -er --arg prefix "${SDK_IMAGE_NAME}@" \
+            '.[0].RepoDigests | map(select(startswith($prefix))) |
+             if length == 1 then .[0] | split("@")[1] else error("Ambiguous pushed SDK digest") end')"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Pull and verify the exact SDK image
+        env:
+          EXISTING_DIGEST: ${{ steps.existing-sdk-image.outputs.digest }}
+          RECHECKED_DIGEST: ${{ steps.rechecked-sdk-image.outputs.digest }}
+          PUBLISHED_DIGEST: ${{ steps.published-sdk-image.outputs.digest }}
+          SDK_RECIPE: ${{ steps.sdk-recipe.outputs.recipe }}
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          if [[ '${{ steps.existing-sdk-image.outputs.exists }}' == true ]]; then
+            digest="$EXISTING_DIGEST"
+          elif [[ '${{ steps.rechecked-sdk-image.outputs.exists }}' == true ]]; then
+            digest="$RECHECKED_DIGEST"
+          else
+            digest="$PUBLISHED_DIGEST"
+          fi
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          export DAYLINE_SDK_IMAGE="$SDK_IMAGE_NAME@$digest"
+          docker pull "$DAYLINE_SDK_IMAGE"
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          image, = json.loads(subprocess.check_output(
+              ["docker", "image", "inspect", os.environ["DAYLINE_SDK_IMAGE"]], text=True))
+          labels = image.get("Config", {}).get("Labels", {}) or {}
+          if image.get("Os") != "linux" or image.get("Architecture") != os.environ["PACKAGE_ARCH"]:
+              raise SystemExit("SDK image does not match the native runner architecture")
+          if labels.get("io.dayline.sdk.recipe") != os.environ["SDK_RECIPE"]:
+              raise SystemExit("SDK image recipe label differs")
+          if labels.get("org.opencontainers.image.source") != "https://github.com/" + os.environ["GITHUB_REPOSITORY"]:
+              raise SystemExit("SDK image is not associated with this source repository")
+          PY
+          printf 'DAYLINE_SDK_IMAGE=%s\n' "$DAYLINE_SDK_IMAGE" >> "$GITHUB_ENV"
+
+      - name: Start and verify the cached native SDK
+        run: |
           docker run --detach --name "$DAYLINE_BUILD_CONTAINER" \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/source" \
-            --mount "type=bind,src=$SDK_CACHE_ROOT,dst=/sdk" \
-            "$RUNTIME_BUILD_IMAGE" sleep infinity
-
-      - name: Build or verify the private Qt 6.4 runtime SDK
-        run: |
-          # No update proxy secret reaches this process or the cached SDK.
-          docker exec "$DAYLINE_BUILD_CONTAINER" bash /source/scripts/build-runtime-sdk.sh
-          [[ -f "$SDK_CACHE_ROOT/prefix/share/dayline-runtime/complete" ]]
-
-      - name: Save the completed SDK before building the application
-        if: steps.sdk-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.SDK_CACHE_ROOT }}/prefix
-          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
+            "$DAYLINE_SDK_IMAGE" sleep infinity
+          script_sha="$(sha256sum scripts/build-runtime-sdk.sh | cut -d ' ' -f 1)"
+          docker exec --interactive --env DAYLINE_EXPECTED_SCRIPT_SHA256="$script_sha" \
+            "$DAYLINE_BUILD_CONTAINER" bash -Eeuo pipefail <<'SH'
+          source /etc/os-release
+          [[ "$ID" == rocky && "$VERSION_ID" == 8.* ]]
+          [[ "$(getconf GNU_LIBC_VERSION)" == 'glibc 2.28' ]]
+          script_sha="$(sha256sum /usr/local/libexec/dayline/build-runtime-sdk.sh | cut -d ' ' -f 1)"
+          [[ "$script_sha" == "$DAYLINE_EXPECTED_SCRIPT_SHA256" ]]
+          expected="$(printf '%s\n%s\n%s\n' "$script_sha" "$(uname -m)" /sdk/prefix | sha256sum | cut -d ' ' -f 1)"
+          [[ "$(cat /sdk/prefix/share/dayline-runtime/build-id)" == "$expected" ]]
+          [[ "$(cat /sdk/prefix/share/dayline-runtime/complete)" == "$expected" ]]
+          [[ -f /opt/rh/gcc-toolset-12/enable && -x /sdk/prefix/bin/patchelf ]]
+          SH
 
       - name: Configure the exact release version
         env:
@@ -225,6 +428,7 @@ jobs:
           name: dayline-linux-${{ matrix.arch }}
           path: artifacts/*.deb
           if-no-files-found: error
+          compression-level: 0
           retention-days: 14
 
       - name: Remove the disposable build container

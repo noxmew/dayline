@@ -31,7 +31,7 @@ EOF
 find "$stage" -type d -exec chmod 755 {} +
 package="$output/dayline_${version}_${arch}.deb"
 # xz is supported by the UOS 20 installer; newer dpkg defaults to zstd.
-dpkg-deb --root-owner-group -Zxz -z9 --build "$stage" "$package"
+dpkg-deb --root-owner-group -Zxz -z6 --build "$stage" "$package"
 [[ $(stat -c %s "$package") -le 67108864 ]] || {
     echo 'Package exceeds the 64 MiB limit supported by existing Dayline updaters.' >&2
     exit 1
