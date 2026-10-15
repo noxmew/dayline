@@ -197,7 +197,7 @@ void DesktopController::resetPosition()
     if (!m_desktop || !qGuiApp->primaryScreen()) return;
     const QRect area = qGuiApp->primaryScreen()->availableGeometry();
     const QSize size(qMin(1050, area.width() - 96), qMin(740, area.height() - 64));
-    m_desktop->setGeometry(QRect(QPoint(area.right() - size.width() - 32, area.top() + 28), size));
+    m_desktop->setGeometry(QRect(QPoint(area.right() - size.width() + 1, area.top()), size));
     constrainGeometry();
 }
 
