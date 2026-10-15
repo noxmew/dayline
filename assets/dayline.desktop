@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dayline
+Name[zh_CN]=日笺
+Comment=A calm desktop calendar
+Comment[zh_CN]=把日子，过得从容一点
+Exec=dayline
+Icon=dayline
+Terminal=false
+Categories=Office;Calendar;
+StartupWMClass=dayline
