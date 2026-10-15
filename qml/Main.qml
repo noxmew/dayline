@@ -176,8 +176,9 @@ ApplicationWindow {
                 }
                 Item { Layout.fillHeight: true; Layout.minimumHeight: 24 }
                 RowLayout {
-                    Layout.topMargin: 18; Layout.fillWidth: true
+                    Layout.topMargin: 18; Layout.fillWidth: true; spacing: 4
                     ActionButton { iconName: "settings"; text: "偏好设置"; quiet: true; onClicked: settingsDialog.open() }
+                    ActionButton { iconName: "refresh"; hint: "检查更新"; Accessible.name: "检查更新"; quiet: true; implicitWidth: 32; onClicked: window.openUpdates() }
                     Item { Layout.fillWidth: true }
                     ActionButton { iconName: Theme.dark ? "sun" : "moon"; hint: Theme.dark ? "浅色外观" : "深色外观"; quiet: true; onClicked: calendarStore.darkMode = !calendarStore.darkMode }
                 }

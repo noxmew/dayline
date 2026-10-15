@@ -22,7 +22,8 @@ ApplicationWindow {
                           Math.max(minimumHeight, Screen.desktopAvailableHeight - 80))
         WindowPlacement.center(window, originWindow)
         show(); raise(); requestActivate()
-        if (updateChecker.state === "idle" && updateChecker.configured) updateChecker.check()
+        if (updateChecker.configured && !updateChecker.busy && updateChecker.state !== "downloaded")
+            updateChecker.check()
     }
     function sizeText(bytes) {
         return bytes < 1024 * 1024 ? (bytes / 1024).toFixed(1) + " KB" : (bytes / 1024 / 1024).toFixed(1) + " MB"
