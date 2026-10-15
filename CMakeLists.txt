@@ -24,6 +24,7 @@ qt_add_qml_module(dayline
         qml/Field.qml
         qml/Toggle.qml
         qml/CalendarCell.qml
+        qml/MonthGrid.qml
         qml/EventEditor.qml
 )
 target_include_directories(dayline PRIVATE ${XCB_INCLUDE_DIR})

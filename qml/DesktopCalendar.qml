@@ -98,24 +98,14 @@ ApplicationWindow {
                 color: "transparent"
                 border.color: Theme.line
                 clip: true
-                Grid {
+                MonthGrid {
                     id: monthGrid
                     anchors.fill: parent
                     anchors.margins: 1
-                    columns: 7
-                    Repeater {
-                        model: calendarStore.monthDays
-                        delegate: CalendarCell {
-                            required property var modelData
-                            width: monthGrid.width / 7
-                            height: monthGrid.height / calendarStore.weekCount
-                            desktopStyle: true
-                            info: modelData
-                            onSelected: date => calendarStore.selectDate(date)
-                            onCreateRequested: date => editor.create(date)
-                            onEventRequested: event => editor.edit(event)
-                        }
-                    }
+                    desktopStyle: true
+                    onSelected: date => calendarStore.selectDate(date)
+                    onCreateRequested: date => editor.create(date)
+                    onEventRequested: event => editor.edit(event)
                 }
             }
 

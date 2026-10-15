@@ -232,22 +232,12 @@ ApplicationWindow {
                         }
                     }
                     Rectangle { x: 1; y: 41; width: parent.width - 2; height: 1; color: Theme.line }
-                    Grid {
+                    MonthGrid {
                         id: monthGrid
                         x: 1; y: 42; width: parent.width - 2; height: parent.height - 43
-                        columns: 7
-                        Repeater {
-                            model: calendarStore.monthDays
-                            delegate: CalendarCell {
-                                required property var modelData
-                                width: monthGrid.width / 7
-                                height: monthGrid.height / calendarStore.weekCount
-                                info: modelData
-                                onSelected: function(date) { calendarStore.selectDate(date) }
-                                onCreateRequested: function(date) { calendarStore.selectDate(date); editor.create(date) }
-                                onEventRequested: function(event) { editor.edit(event) }
-                            }
-                        }
+                        onSelected: function(date) { calendarStore.selectDate(date) }
+                        onCreateRequested: function(date) { calendarStore.selectDate(date); editor.create(date) }
+                        onEventRequested: function(event) { editor.edit(event) }
                     }
                 }
                 Rectangle {

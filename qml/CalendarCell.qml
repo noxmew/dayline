@@ -22,8 +22,6 @@ Rectangle {
         onClicked: cell.selected(cell.info.date)
         onDoubleClicked: cell.createRequested(cell.info.date)
     }
-    Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.line }
-    Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line }
     Rectangle {
         x: 11; y: 11; width: 28; height: 28; radius: 9
         color: cell.info.today ? Theme.accent : "transparent"
