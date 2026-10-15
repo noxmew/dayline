@@ -15,7 +15,6 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
-#include <QSysInfo>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
@@ -69,8 +68,11 @@ public slots:
         if (m_reply) return;
         clearPackage();
         if (m_proxy.isEmpty()) { fail("此构建未配置更新服务。请使用发布页面提供的安装包。"); return; }
-        if (architecture().isEmpty() || QSysInfo::productType() != "ubuntu" || QSysInfo::productVersion() != "24.04") {
-            fail("目前仅提供 Ubuntu 24.04 的 amd64 和 arm64 更新包。"); return;
+#if !defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
+        fail("目前仅提供 Linux 桌面版更新包。"); return;
+#endif
+        if (architecture().isEmpty()) {
+            fail("目前仅提供 amd64 和 arm64 架构的更新包。"); return;
         }
         emit snapshot("checking", "正在检查新版本…", {}, {}, {}, {}, 0);
         m_downloading = false;

@@ -59,7 +59,7 @@ ApplicationWindow {
                     Item { Layout.fillWidth: true }
                     Icon { width: 17; height: 17; name: updateChecker.state === "current" || updateChecker.state === "downloaded" ? "check" : "refresh"; color: Theme.accent }
                 }
-                Text { text: "Ubuntu 24.04 · amd64 / arm64"; color: Theme.muted; font.pixelSize: 11 }
+                Text { text: "Linux · amd64 / arm64"; color: Theme.muted; font.pixelSize: 11 }
                 Text { visible: updateChecker.packageName.length > 0; Layout.fillWidth: true; text: updateChecker.packageName + " · " + window.sizeText(updateChecker.packageSize); color: Theme.secondary; font.pixelSize: 11; wrapMode: Text.WrapAnywhere }
             }
         }
