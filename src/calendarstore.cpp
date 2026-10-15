@@ -1,6 +1,7 @@
 #include "calendarstore.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QLocale>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -26,8 +27,10 @@ bool CalendarStore::initialize()
         setError("无法创建日历数据目录，请检查目录权限。");
         return false;
     }
+    const QString databasePath = directory + "/calendar.sqlite";
+    const bool newDatabase = !QFileInfo::exists(databasePath);
     m_db = QSqlDatabase::addDatabase("QSQLITE");
-    m_db.setDatabaseName(directory + "/calendar.sqlite");
+    m_db.setDatabaseName(databasePath);
     if (!m_db.open()) {
         setError("无法打开本机日历数据库：" + m_db.lastError().text());
         return false;
@@ -40,7 +43,7 @@ bool CalendarStore::initialize()
         setError(query.lastError().text());
         return false;
     }
-    if (m_demo)
+    if (m_demo && newDatabase)
         seedPreview();
     reload();
     return m_error.isEmpty();
@@ -285,8 +288,6 @@ bool CalendarStore::deleteEvent(const QString &id)
 void CalendarStore::seedPreview()
 {
     QSqlQuery query(m_db);
-    if (!query.exec("SELECT COUNT(*) FROM events")) { setError(query.lastError().text()); return; }
-    if (!query.next() || query.value(0).toInt() != 0) return;
     struct Sample { int day; const char *title; const char *start; const char *end; const char *calendar; const char *notes; };
     const Sample samples[] = {
         {2,"留一天给自己","","","life","散散步，读几页喜欢的书。"},

@@ -4,6 +4,8 @@ import Dayline 1.0
 Rectangle {
     id: cell
     required property var info
+    readonly property int maxEvents: Math.max(1, Math.floor((height - 58) / 30))
+    readonly property bool compact: height < 90
     signal selected(string date)
     signal createRequested(string date)
     signal eventRequested(var event)
@@ -36,9 +38,10 @@ Rectangle {
         text: "今天"; color: Theme.accent; font.pixelSize: 10
     }
     Column {
+        visible: !cell.compact
         x: 7; y: 47; width: parent.width - 14; spacing: 5
         Repeater {
-            model: cell.info.events.slice(0, Math.max(1, Math.floor((cell.height - 69) / 28)))
+            model: cell.info.events.slice(0, cell.maxEvents)
             delegate: Rectangle {
                 required property var modelData
                 width: parent.width; height: 25; radius: 5
@@ -49,17 +52,23 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter
                     text: (modelData.allDay ? "" : modelData.start + "  ") + modelData.title
                     elide: Text.ElideRight
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     color: Theme.dark ? Qt.lighter(modelData.color,1.6) : Qt.darker(modelData.color,1.08)
                 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { cell.selected(cell.info.date); cell.eventRequested(modelData) } }
             }
         }
         Text {
-            readonly property int remaining: cell.info.events.length - Math.max(1, Math.floor((cell.height - 69) / 28))
+            readonly property int remaining: cell.info.events.length - cell.maxEvents
             visible: remaining > 0
             text: "还有 " + remaining + " 项"
             font.pixelSize: 10; color: Theme.secondary; leftPadding: 5
         }
+    }
+    Text {
+        x: 13; y: 48
+        visible: cell.compact && cell.info.events.length > 0
+        text: cell.info.events.length + " 项日程"
+        font.pixelSize: 10; color: Theme.secondary
     }
 }

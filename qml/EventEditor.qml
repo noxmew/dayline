@@ -79,7 +79,11 @@ Dialog {
                     palette.buttonText: Theme.text
                     palette.window: Theme.surface
                     palette.base: Theme.surface
+                    palette.highlight: Theme.accentSoft
+                    palette.highlightedText: Theme.text
                     background: Rectangle { radius: 8; color: Theme.input; border.color: Theme.line }
+                    indicator: Icon { name: "down"; width: 14; height: 14; x: parent.width - width - 12; y: (parent.height - height)/2; color: Theme.secondary }
+                    contentItem: Text { text: calendarField.displayText; leftPadding: 12; rightPadding: 32; verticalAlignment: Text.AlignVCenter; color: Theme.text; font.pixelSize: 13 }
                 }
             }
         }
@@ -87,7 +91,7 @@ Dialog {
             Layout.fillWidth: true
             Text { text: "全天日程"; color: Theme.text; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
-            Switch { id: allDay; palette.highlight: Theme.accent; checked: true }
+            Toggle { id: allDay; checked: true }
         }
         RowLayout {
             visible: !allDay.checked

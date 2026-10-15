@@ -8,7 +8,7 @@ ApplicationWindow {
     width: 1480
     height: 930
     minimumWidth: 1220
-    minimumHeight: 780
+    minimumHeight: 720
     visible: true
     title: "日笺 · Dayline" + (calendarStore.demo ? " · 预览空间" : "")
     color: Theme.background
@@ -103,9 +103,10 @@ ApplicationWindow {
                     }
                 }
                 Rectangle { Layout.fillWidth: true; Layout.topMargin: 24; height: 1; color: Theme.line }
-                Text { Layout.topMargin: 23; Layout.leftMargin: 10; text: calendarStore.monthLabel; font.pixelSize: 11; color: Theme.secondary; font.weight: Font.Medium }
+                Text { visible: window.height >= 850; Layout.topMargin: 23; Layout.leftMargin: 10; text: calendarStore.monthLabel; font.pixelSize: 11; color: Theme.secondary; font.weight: Font.Medium }
                 Grid {
                     id: miniMonth
+                    visible: window.height >= 850
                     Layout.fillWidth: true; Layout.topMargin: 13
                     columns: 7
                     Repeater {
@@ -435,7 +436,7 @@ ApplicationWindow {
                     Text { text: "为夜晚的灵感，调暗一点光。"; color: Theme.muted; font.pixelSize: 11 }
                 }
                 Item { Layout.fillWidth: true }
-                Switch { checked: calendarStore.darkMode; palette.highlight: Theme.accent; onToggled: calendarStore.darkMode = checked }
+                Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
             Text { text: "日笺  0.1 · 界面预览版"; color: Theme.secondary; font.pixelSize: 12 }

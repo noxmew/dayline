@@ -17,6 +17,7 @@ int main(int argc, char *argv[])
     app.setOrganizationName("Dayline");
     app.setApplicationName("Dayline");
     app.setApplicationVersion("0.1.0");
+    app.setDesktopFileName("dayline");
     app.setFont(QFont("Noto Sans CJK SC", 10));
     QQuickStyle::setStyle("Basic");
 
@@ -27,13 +28,20 @@ int main(int argc, char *argv[])
     parser.addOption({"demo", "Open an isolated preview space with sample events."});
     parser.addOption({"screenshot", "Save the rendered window to a PNG and exit.", "file"});
     parser.addOption({"show-editor", "Open the event editor on launch."});
+    parser.addOption({"theme", "Choose light or dark appearance.", "theme"});
     parser.process(app);
+
+    if (parser.isSet("theme") && parser.value("theme") != "light" && parser.value("theme") != "dark") {
+        qCritical() << "Theme must be light or dark.";
+        return 2;
+    }
 
     CalendarStore store(parser.isSet("demo"));
     if (!store.initialize()) {
         qCritical().noquote() << store.error();
         return 1;
     }
+    if (parser.isSet("theme")) store.setDarkMode(parser.value("theme") == "dark");
 
     QQmlApplicationEngine engine;
     engine.addImportPath("qrc:/qt/qml");

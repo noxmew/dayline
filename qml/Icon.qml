@@ -34,6 +34,7 @@ Canvas {
         case "plus": line(12,5,12,19); line(5,12,19,12); break
         case "left": p.moveTo(14,6); p.lineTo(8,12); p.lineTo(14,18); break
         case "right": p.moveTo(10,6); p.lineTo(16,12); p.lineTo(10,18); break
+        case "down": p.moveTo(6,9); p.lineTo(12,15); p.lineTo(18,9); break
         case "close": line(6,6,18,18); line(18,6,6,18); break
         case "check": p.moveTo(5,12); p.lineTo(10,17); p.lineTo(19,7); break
         case "clock": circle(12,12,8.5); p.moveTo(12,7); p.lineTo(12,12); p.lineTo(16,14); break

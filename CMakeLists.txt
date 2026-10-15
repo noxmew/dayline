@@ -18,6 +18,7 @@ qt_add_qml_module(dayline
         qml/Icon.qml
         qml/ActionButton.qml
         qml/Field.qml
+        qml/Toggle.qml
         qml/CalendarCell.qml
         qml/EventEditor.qml
 )
@@ -33,5 +34,7 @@ set(CPACK_PACKAGE_CONTACT "Dayline")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Dayline - a calm, native desktop calendar")
 set(CPACK_PACKAGING_INSTALL_PREFIX /usr)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt6core6t64 (>= 6.4), libqt6gui6t64 (>= 6.4), libqt6qml6 (>= 6.4), libqt6quick6 (>= 6.4), libqt6quickcontrols2-6 (>= 6.4), libqt6sql6t64 (>= 6.4), libqt6sql6-sqlite, qt6-qpa-plugins, qml6-module-qtqml, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtqml-models")
+set(CPACK_STRIP_FILES ON)
+set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.38), libgcc-s1, libstdc++6 (>= 13.1), libqt6core6t64 (>= 6.4), libqt6gui6t64 (>= 6.4), libqt6qml6 (>= 6.4), libqt6quick6 (>= 6.4), libqt6quickcontrols2-6 (>= 6.4), libqt6sql6t64 (>= 6.4), libqt6sql6-sqlite, qt6-qpa-plugins, qml6-module-qtqml, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtqml-models")
 include(CPack)

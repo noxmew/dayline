@@ -9,3 +9,9 @@ Icon=dayline
 Terminal=false
 Categories=Office;Calendar;
 StartupWMClass=dayline
+Actions=Preview;
+
+[Desktop Action Preview]
+Name=Open sample calendar
+Name[zh_CN]=体验示例日历
+Exec=dayline --demo
