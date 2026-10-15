@@ -24,6 +24,9 @@ qt_add_qml_module(dayline
     URI Dayline
     VERSION 1.0
     RESOURCE_PREFIX /qt/qml
+    SOURCES
+        src/windowplacement.cpp
+        src/windowplacement.h
     QML_FILES
         qml/Main.qml
         qml/DesktopCalendar.qml
@@ -46,7 +49,7 @@ qt_add_qml_module(dayline
         qml/EventEditor.qml
         qml/ICloudSettings.qml
 )
-target_include_directories(dayline PRIVATE ${XCB_INCLUDE_DIR} ${ICAL_INCLUDE_DIR})
+target_include_directories(dayline PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${XCB_INCLUDE_DIR} ${ICAL_INCLUDE_DIR})
 target_compile_definitions(dayline PRIVATE DAYLINE_VERSION="${PROJECT_VERSION}")
 target_link_libraries(dayline PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql Qt6::DBus Qt6::Network ${XCB_LIBRARY} ${ICAL_LIBRARY})
 install(TARGETS dayline RUNTIME DESTINATION bin)

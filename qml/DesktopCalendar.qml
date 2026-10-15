@@ -163,5 +163,5 @@ ApplicationWindow {
         MenuEntry { text: "退出日笺"; iconName: "power"; danger: true; onTriggered: Qt.quit() }
     }
 
-    EventEditor { id: editor }
+    EventEditor { id: editor; originWindow: desktop }
 }

@@ -18,6 +18,7 @@ class DesktopController final : public QObject
     Q_PROPERTY(qreal panelOpacity READ panelOpacity WRITE setPanelOpacity NOTIFY appearanceChanged)
     Q_PROPERTY(bool startOnDesktop READ startOnDesktop CONSTANT)
     Q_PROPERTY(bool needsGnomeBridge READ needsGnomeBridge CONSTANT)
+    Q_PROPERTY(bool preparingDesktop READ preparingDesktop NOTIFY preparingDesktopChanged)
 
 public:
     explicit DesktopController(bool demo, bool requested, QObject *parent = nullptr);
@@ -29,23 +30,25 @@ public:
     qreal panelOpacity() const;
     bool startOnDesktop() const { return m_requested && m_supported; }
     bool needsGnomeBridge() const { return m_needsGnomeBridge; }
+    bool preparingDesktop() const { return m_showWhenSupported; }
     void setEnabled(bool enabled);
     void setLocked(bool locked);
     void setPanelOpacity(qreal opacity);
 
     Q_INVOKABLE void openManager();
-    Q_INVOKABLE void showDesktop();
+    Q_INVOKABLE bool showDesktop();
     Q_INVOKABLE void resetPosition();
     Q_INVOKABLE void beginMove();
     Q_INVOKABLE void beginResize();
     Q_INVOKABLE void updateInteraction();
     Q_INVOKABLE void endInteraction();
-    Q_INVOKABLE void enableGnomeBridge();
 
 signals:
     void supportedChanged();
     void enabledChanged();
     void appearanceChanged();
+    void preparingDesktopChanged();
+    void desktopActivationFailed();
 
 private:
     void constrainGeometry();
@@ -53,15 +56,19 @@ private:
     void saveGeometry();
     void applyDesktopHints();
     void updateSupport();
+    bool enableGnomeBridge();
+    void cancelDesktopPreparation();
     QSettings m_settings;
     QPointer<QQuickWindow> m_manager;
     QPointer<QQuickWindow> m_desktop;
     QTimer m_saveTimer;
+    QTimer m_bridgeTimer;
     bool m_supported = false;
     bool m_protocolSupported = false;
     bool m_needsGnomeBridge = false;
     bool m_requested;
     bool m_enabled = false;
+    bool m_showWhenSupported = false;
     QString m_supportMessage;
     enum class Interaction { None, Move, Resize };
     Interaction m_interaction = Interaction::None;

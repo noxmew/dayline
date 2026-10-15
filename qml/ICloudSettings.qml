@@ -1,23 +1,27 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import Dayline 1.0
 
 ApplicationWindow {
     id: window
     objectName: "icloudSettings"
+    required property Window originWindow
     title: "iCloud · 日笺"
     width: 600
-    height: 760
+    height: Math.min(760, Math.max(420, Screen.desktopAvailableHeight - 80))
     minimumWidth: 520
-    minimumHeight: 560
+    minimumHeight: Math.min(560, Math.max(420, Screen.desktopAvailableHeight - 80))
     property bool passwordVisible: false
+    property bool browserOpenFailed: false
     visible: false
     color: Theme.surface
     transientParent: null
     function open() {
         accountField.text = iCloudSync.account
         regionField.currentIndex = iCloudSync.region === "china" ? 1 : 0
+        WindowPlacement.center(window, originWindow)
         show(); raise(); requestActivate()
     }
     Shortcut { sequence: "Escape"; onActivated: window.close() }
@@ -48,8 +52,6 @@ ApplicationWindow {
                     Text { text: "让日程，在设备间流动"; color: Theme.text; font.pixelSize: 22; font.weight: Font.DemiBold }
                     Text { Layout.fillWidth: true; text: iCloudSync.status; color: Theme.secondary; font.pixelSize: 11; wrapMode: Text.Wrap }
                 }
-                Item { Layout.fillWidth: true }
-                ActionButton { iconName: "close"; quiet: true; hint: "关闭"; onClicked: window.close() }
             }
             InlineNotice {
                 Layout.fillWidth: true
@@ -60,8 +62,10 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: "先为 Apple 账户开启双重认证，再生成 <a style='color:" + Theme.accent + "; text-decoration:none' href='https://account.apple.com/account/manage'>App 专用密码 ↗</a>。这里不要填写 Apple 账户的登录密码。"
                 textFormat: Text.RichText; wrapMode: Text.Wrap; color: Theme.secondary; linkColor: Theme.accent; font.pixelSize: 12; lineHeight: 1.5
-                onLinkActivated: link => Qt.openUrlExternally(link)
+                onLinkActivated: link => window.browserOpenFailed = !Qt.openUrlExternally(link)
+                HoverHandler { cursorShape: parent.hoveredLink.length ? Qt.PointingHandCursor : Qt.ArrowCursor }
             }
+            InlineNotice { Layout.fillWidth: true; visible: window.browserOpenFailed; error: true; text: "无法启动系统默认浏览器，请检查默认浏览器设置后重试。" }
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: accountForm.implicitHeight + 32

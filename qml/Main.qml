@@ -22,6 +22,12 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequence: "PgUp"; onActivated: calendarStore.changeMonth(-1) }
     Shortcut { sequence: "PgDown"; onActivated: calendarStore.changeMonth(1) }
+    Connections {
+        target: desktopController
+        function onDesktopActivationFailed() {
+            if (window.visible) desktopUnavailableDialog.open()
+        }
+    }
 
     component SideNav: AbstractButton {
         id: nav
@@ -192,7 +198,12 @@ ApplicationWindow {
                     Rectangle { width: 1; height: 13; color: Theme.line }
                     Text { text: "让每一天，有迹可循"; color: Theme.muted; font.pixelSize: 10 }
                     Item { Layout.fillWidth: true }
-                    ActionButton { text: "贴到桌面"; iconName: "desktop"; enabled: desktopController.supported; onClicked: desktopController.showDesktop() }
+                    ActionButton {
+                        text: desktopController.preparingDesktop ? "正在准备…" : "贴到桌面"
+                        iconName: "desktop"
+                        enabled: !desktopController.preparingDesktop
+                        onClicked: { if (!desktopController.showDesktop()) desktopUnavailableDialog.open() }
+                    }
                     Field {
                         id: searchField
                         Layout.preferredWidth: 188
@@ -409,9 +420,32 @@ ApplicationWindow {
         }
     }
 
-    EventEditor { id: editor }
+    EventEditor { id: editor; originWindow: window }
 
-    ICloudSettings { id: cloudDialog }
+    ICloudSettings { id: cloudDialog; originWindow: window }
+
+    Dialog {
+        id: desktopUnavailableDialog
+        parent: Overlay.overlay; anchors.centerIn: parent
+        width: 420; padding: 24; modal: true
+        background: Rectangle { color: Theme.surface; radius: 16; border.color: Theme.lineStrong }
+        Overlay.modal: Rectangle { color: Theme.overlay }
+        contentItem: ColumnLayout {
+            spacing: 18
+            Text { text: "暂时无法贴到桌面"; color: Theme.text; font.pixelSize: 19; font.weight: Font.DemiBold }
+            Text {
+                Layout.fillWidth: true
+                text: desktopController.needsGnomeBridge
+                    ? "请重新登录桌面后，再点击“贴到桌面”。"
+                    : "当前桌面暂不支持此功能，请在日历窗口中继续使用日笺。"
+                color: Theme.secondary; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.5
+            }
+            RowLayout {
+                Item { Layout.fillWidth: true }
+                ActionButton { text: "知道了"; primary: true; onClicked: desktopUnavailableDialog.close() }
+            }
+        }
+    }
 
     Dialog {
         id: settingsDialog
@@ -446,27 +480,6 @@ ApplicationWindow {
                     }
                     Item { Layout.fillWidth: true }
                     Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked; Accessible.name: "深色外观" }
-                }
-            }
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: desktopSettings.implicitHeight + 32
-                radius: 12; color: Theme.input; border.color: Theme.line
-                ColumnLayout {
-                    id: desktopSettings
-                    anchors.fill: parent; anchors.margins: 16; spacing: 12
-                    RowLayout {
-                        Layout.fillWidth: true
-                        ColumnLayout {
-                            spacing: 7
-                            Text { text: "桌面月历"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
-                            Text { text: "打开电脑，就看见这一天"; color: Theme.muted; font.pixelSize: 11 }
-                        }
-                        Item { Layout.fillWidth: true }
-                        Toggle { enabled: desktopController.supported; checked: desktopController.enabled; onToggled: desktopController.enabled = checked; Accessible.name: "桌面月历" }
-                    }
-                    Text { Layout.fillWidth: true; text: desktopController.supportMessage; color: Theme.secondary; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.4 }
-                    ActionButton { visible: desktopController.needsGnomeBridge && !desktopController.supported; text: "启用桌面桥"; iconName: "desktop"; onClicked: desktopController.enableGnomeBridge() }
                 }
             }
             ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }

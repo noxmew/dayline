@@ -7,6 +7,7 @@ import Dayline 1.0
 ApplicationWindow {
     id: editor
     objectName: "eventEditor"
+    required property Window originWindow
     property string eventId: ""
     property var calendarOptions: calendarStore.writableCalendars
     property bool readOnlyEvent: false
@@ -23,7 +24,10 @@ ApplicationWindow {
     color: Theme.surface
     background: Rectangle { color: Theme.surface }
 
-    function open() { show(); raise(); requestActivate() }
+    function open() {
+        WindowPlacement.center(editor, originWindow)
+        show(); raise(); requestActivate()
+    }
     onClosing: deleteDialog.close()
     Shortcut { sequence: "Escape"; onActivated: editor.close() }
 
@@ -105,8 +109,6 @@ ApplicationWindow {
                 Text { text: editor.readOnlyEvent ? "日程详情" : editor.eventId.length ? "编辑日程" : "记下下一件小事"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
                 Text { text: "给重要的事，留一个位置"; color: Theme.muted; font.pixelSize: 11 }
             }
-            Item { Layout.fillWidth: true }
-            ActionButton { iconName: "close"; hint: "关闭"; quiet: true; onClicked: editor.close() }
         }
         Field { id: titleField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; placeholderText: "这一天，有什么安排？"; font.pixelSize: 15; implicitHeight: 48; maximumLength: 200 }
         RowLayout {

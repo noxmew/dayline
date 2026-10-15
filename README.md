@@ -55,7 +55,7 @@ dayline
 
 桌面模式使用 X11 / XWayland 的桌面窗口协议，效果取决于桌面环境。目前在 Ubuntu 的 GNOME 46 Wayland 会话验证过。
 
-**GNOME Wayland 用户：** 安装包附带 `Dayline Desktop Bridge` 扩展，用来让月历接收点击，并保持在普通窗口下面。首次安装后重新登录桌面，再到日笺「偏好设置」点击「启用桌面桥」。扩展目前仅声明支持 GNOME Shell 46；其他版本尚未验证。
+**GNOME Wayland 用户：** 安装包附带 `Dayline Desktop Bridge` 扩展，用来让月历接收点击，并保持在普通窗口下面。首次安装后重新登录桌面，再在日笺主窗口点击「贴到桌面」，日笺会按需启用扩展。扩展目前仅声明支持 GNOME Shell 46；其他版本尚未验证。
 
 ## 连接 iCloud
 

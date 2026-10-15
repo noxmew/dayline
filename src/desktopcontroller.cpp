@@ -65,12 +65,22 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(350);
     connect(&m_saveTimer, &QTimer::timeout, this, &DesktopController::saveGeometry);
+    m_bridgeTimer.setSingleShot(true);
+    m_bridgeTimer.setInterval(4000);
+    connect(&m_bridgeTimer, &QTimer::timeout, this, [this] {
+        cancelDesktopPreparation();
+        emit desktopActivationFailed();
+    });
 }
 
 void DesktopController::attach(QQuickWindow *manager, QQuickWindow *desktop)
 {
     m_manager = manager;
     m_desktop = desktop;
+    if (m_manager)
+        connect(m_manager, &QWindow::visibleChanged, this, [this](bool visible) {
+            if (!visible) cancelDesktopPreparation();
+        });
     if (!m_desktop || !m_protocolSupported) return;
     m_desktop->setTransientParent(nullptr);
     const QRect saved = m_settings.value("desktop/geometry").toRect();
@@ -104,6 +114,7 @@ void DesktopController::updateSupport()
         m_supportMessage = "当前窗口管理器未提供日笺需要的 X11 桌面窗口协议。";
     } else if (m_needsGnomeBridge) {
         QDBusInterface bridge("org.dayline.DesktopBridge", "/org/dayline/DesktopBridge", "org.dayline.DesktopBridge");
+        bridge.setTimeout(1500);
         const QDBusReply<uint> version = bridge.call("GetVersion");
         m_supported = version.isValid() && version.value() == 1;
         m_supportMessage = m_supported ? "GNOME 桌面桥已连接，月历可在桌面图标层上接收操作。"
@@ -113,19 +124,31 @@ void DesktopController::updateSupport()
     }
     if (!m_supported && m_enabled) setEnabled(false);
     emit supportedChanged();
+    if (m_supported && m_showWhenSupported) {
+        showDesktop();
+    }
 }
 
-void DesktopController::enableGnomeBridge()
+bool DesktopController::enableGnomeBridge()
 {
-    if (!m_needsGnomeBridge) return;
     QDBusInterface extensions("org.gnome.Shell.Extensions", "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions");
+    extensions.setTimeout(3000);
     const QDBusReply<bool> result = extensions.call("EnableExtension", "dayline-desktop@dayline");
     if (result.isValid() && result.value()) {
         updateSupport();
-    } else {
-        m_supportMessage = "当前 GNOME 会话尚未识别桌面桥。请重新登录桌面，然后在这里启用扩展。";
-        emit supportedChanged();
+        return true;
     }
+    m_supportMessage = "请重新登录桌面后，再点击“贴到桌面”。";
+    emit supportedChanged();
+    return false;
+}
+
+void DesktopController::cancelDesktopPreparation()
+{
+    if (!m_showWhenSupported) return;
+    m_showWhenSupported = false;
+    m_bridgeTimer.stop();
+    emit preparingDesktopChanged();
 }
 
 void DesktopController::applyDesktopHints()
@@ -185,11 +208,24 @@ void DesktopController::openManager()
     m_manager->requestActivate();
 }
 
-void DesktopController::showDesktop()
+bool DesktopController::showDesktop()
 {
-    if (!m_supported) return;
+    if (!m_supported) {
+        if (!m_protocolSupported || !m_needsGnomeBridge) return false;
+        if (m_showWhenSupported) return true;
+        m_showWhenSupported = true;
+        emit preparingDesktopChanged();
+        m_bridgeTimer.start();
+        if (!enableGnomeBridge()) {
+            cancelDesktopPreparation();
+            return false;
+        }
+        return true;
+    }
+    cancelDesktopPreparation();
     setEnabled(true);
     if (m_manager) m_manager->hide();
+    return true;
 }
 
 void DesktopController::resetPosition()
