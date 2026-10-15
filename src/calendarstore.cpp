@@ -16,6 +16,7 @@ CalendarStore::CalendarStore(bool demo, QObject *parent)
       m_selected(QDate::currentDate()),
       m_settings("Dayline", demo ? "preview" : "dayline")
 {
+    connect(this, &CalendarStore::changed, this, &CalendarStore::selectionChanged);
 }
 
 bool CalendarStore::initialize()
@@ -146,7 +147,7 @@ QVariantList CalendarStore::monthDays() const
         result.append(QVariantMap {
             {"date", date.toString(Qt::ISODate)}, {"day", date.day()},
             {"inMonth", date.month() == m_month.month()},
-            {"today", date == QDate::currentDate()}, {"selected", date == m_selected},
+            {"today", date == QDate::currentDate()},
             {"weekend", date.dayOfWeek() > 5}, {"events", eventsOn(date)}
         });
     }
@@ -214,9 +215,10 @@ void CalendarStore::goToday()
 void CalendarStore::selectDate(const QString &iso)
 {
     const QDate date = QDate::fromString(iso, Qt::ISODate);
-    if (!date.isValid()) return;
+    if (!date.isValid() || date == m_selected) return;
     m_selected = date;
-    emit changed();
+    // Keep the date cells alive so clicks and double-clicks finish on the same item.
+    emit selectionChanged();
 }
 void CalendarStore::toggleCalendar(const QString &id)
 {

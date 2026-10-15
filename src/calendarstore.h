@@ -12,14 +12,14 @@ class CalendarStore final : public QObject
     Q_OBJECT
     Q_PROPERTY(QString monthLabel READ monthLabel NOTIFY changed)
     Q_PROPERTY(QString monthEnglish READ monthEnglish NOTIFY changed)
-    Q_PROPERTY(QString selectedDate READ selectedDate NOTIFY changed)
-    Q_PROPERTY(QString selectedHeading READ selectedHeading NOTIFY changed)
-    Q_PROPERTY(QString selectedWeekday READ selectedWeekday NOTIFY changed)
-    Q_PROPERTY(QString selectedDay READ selectedDay NOTIFY changed)
-    Q_PROPERTY(bool selectedIsToday READ selectedIsToday NOTIFY changed)
+    Q_PROPERTY(QString selectedDate READ selectedDate NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedHeading READ selectedHeading NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedWeekday READ selectedWeekday NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedDay READ selectedDay NOTIFY selectionChanged)
+    Q_PROPERTY(bool selectedIsToday READ selectedIsToday NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList monthDays READ monthDays NOTIFY changed)
     Q_PROPERTY(QVariantList calendars READ calendars NOTIFY changed)
-    Q_PROPERTY(QVariantList selectedEvents READ selectedEvents NOTIFY changed)
+    Q_PROPERTY(QVariantList selectedEvents READ selectedEvents NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList upcomingEvents READ upcomingEvents NOTIFY changed)
     Q_PROPERTY(QVariantList visibleEvents READ visibleEvents NOTIFY changed)
     Q_PROPERTY(int monthCount READ monthCount NOTIFY changed)
@@ -63,6 +63,7 @@ public:
 
 signals:
     void changed();
+    void selectionChanged();
     void errorChanged();
     void darkModeChanged();
 

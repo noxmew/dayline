@@ -120,7 +120,7 @@ ApplicationWindow {
                             width: miniMonth.width/7; height: 26
                             Rectangle {
                                 anchors.centerIn: parent; width: 24; height: 24; radius: 8
-                                color: modelData.today ? Theme.accent : (modelData.selected ? Theme.accentSoft : "transparent")
+                                color: modelData.today ? Theme.accent : (modelData.date === calendarStore.selectedDate ? Theme.accentSoft : "transparent")
                                 Text {
                                     anchors.centerIn: parent; text: modelData.day; font.pixelSize: 10
                                     color: modelData.today ? (Theme.dark ? "#17392D" : "white") : (modelData.inMonth ? Theme.secondary : Theme.muted)

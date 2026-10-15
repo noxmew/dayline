@@ -5,13 +5,14 @@ Rectangle {
     id: cell
     required property var info
     property bool desktopStyle: false
+    readonly property bool isSelected: info.date === calendarStore.selectedDate
     readonly property int maxEvents: Math.max(1, Math.floor((height - (desktopStyle ? 44 : 58)) / (desktopStyle ? 25 : 30)))
     readonly property bool compact: height < (desktopStyle ? 66 : 90)
     signal selected(string date)
     signal createRequested(string date)
     signal eventRequested(var event)
-    color: desktopStyle ? (info.selected ? Theme.tint(Theme.accent, 0.12) : hovered.hovered ? Theme.tint(Theme.text, 0.05) : "transparent") :
-           (info.selected ? Theme.accentSoft : (hovered.hovered ? Theme.hover : (info.weekend ? Theme.panel : Theme.background)))
+    color: desktopStyle ? (isSelected ? Theme.tint(Theme.accent, 0.12) : hovered.hovered ? Theme.tint(Theme.text, 0.05) : "transparent") :
+           (isSelected ? Theme.accentSoft : (hovered.hovered ? Theme.hover : (info.weekend ? Theme.panel : Theme.background)))
     clip: true
     Accessible.role: Accessible.Button
     Accessible.name: info.date + "，" + info.events.length + "项日程"
@@ -31,7 +32,7 @@ Rectangle {
             text: cell.info.day
             color: cell.info.today ? (Theme.dark ? "#15352A" : "white") : (!cell.info.inMonth ? Theme.muted : Theme.text)
             font.pixelSize: 13
-            font.weight: cell.info.today || cell.info.selected ? Font.DemiBold : Font.Normal
+            font.weight: cell.info.today || cell.isSelected ? Font.DemiBold : Font.Normal
         }
     }
     Text {
