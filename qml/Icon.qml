@@ -28,6 +28,18 @@ Canvas {
             p.roundedRect(3,4,18,13,2,2); line(12,17,12,21); line(8,21,16,21); break
         case "lock":
             p.roundedRect(5,10,14,11,2,2); p.moveTo(8,10); p.lineTo(8,7); p.bezierCurveTo(8,1,16,1,16,7); p.lineTo(16,10); line(12,14,12,17); break
+        case "unlock":
+            p.roundedRect(5,10,14,11,2,2); p.moveTo(8,10); p.lineTo(8,7); p.bezierCurveTo(8,1,16,1,16,6); line(12,14,12,17); break
+        case "reset":
+            p.moveTo(4,10); p.bezierCurveTo(6,1,21,3,21,12); p.bezierCurveTo(21,22,7,24,4,16); p.moveTo(4,4); p.lineTo(4,10); p.lineTo(10,10); break
+        case "power":
+            p.moveTo(7,5); p.bezierCurveTo(-1,11,4,22,12,22); p.bezierCurveTo(20,22,25,11,17,5); line(12,2,12,12); break
+        case "opacity":
+            circle(12,12,8); p.moveTo(12,4); p.lineTo(12,20); break
+        case "warning":
+            p.moveTo(12,3); p.lineTo(22,21); p.lineTo(2,21); p.closePath(); line(12,9,12,14); circle(12,18,0.5); break
+        case "refresh":
+            p.moveTo(20,9); p.bezierCurveTo(18,2,7,2,4,9); p.moveTo(20,3); p.lineTo(20,9); p.lineTo(14,9); p.moveTo(4,15); p.bezierCurveTo(6,22,17,22,20,15); p.moveTo(4,21); p.lineTo(4,15); p.lineTo(10,15); break
         case "calendar":
             p.roundedRect(4,5,16,16,3,3); line(4,10,20,10); line(8,3,8,7); line(16,3,16,7)
             line(8,14,10,14); line(14,14,16,14); line(8,17,10,17); break

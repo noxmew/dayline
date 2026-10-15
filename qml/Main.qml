@@ -31,7 +31,12 @@ ApplicationWindow {
         implicitHeight: 43
         hoverEnabled: true
         Accessible.name: label
-        background: Rectangle { radius: 9; color: nav.selected ? Theme.accentSoft : (nav.hovered ? Theme.hover : "transparent") }
+        background: Rectangle {
+            radius: 9
+            color: nav.selected ? Theme.accentSoft : (nav.hovered ? Theme.hover : "transparent")
+            border.width: nav.visualFocus ? 1 : 0
+            border.color: Theme.accent
+        }
         contentItem: RowLayout {
             spacing: 12
             Icon { Layout.leftMargin: 13; name: nav.glyph; width: 18; height: 18; color: nav.selected ? Theme.accent : Theme.secondary }
@@ -87,7 +92,12 @@ ApplicationWindow {
                         implicitHeight: 33; hoverEnabled: true
                         Accessible.name: modelData.name + "日历"
                         onClicked: calendarStore.toggleCalendar(modelData.id)
-                        background: Rectangle { radius: 7; color: calendarToggle.hovered ? Theme.hover : "transparent" }
+                        background: Rectangle {
+                            radius: 7
+                            color: calendarToggle.hovered ? Theme.hover : "transparent"
+                            border.width: calendarToggle.visualFocus ? 1 : 0
+                            border.color: Theme.accent
+                        }
                         contentItem: RowLayout {
                             spacing: 10
                             Rectangle {
@@ -190,7 +200,7 @@ ApplicationWindow {
                         placeholderText: "搜索日程…"
                         onTextChanged: calendarStore.searchQuery = text
                         Icon { x: 10; anchors.verticalCenter: parent.verticalCenter; name: "search"; width: 15; height: 15; color: Theme.muted }
-                        Text { visible: !searchField.text.length; anchors.right: parent.right; anchors.rightMargin: 9; anchors.verticalCenter: parent.verticalCenter; text: "⌃ K"; color: Theme.muted; font.pixelSize: 9 }
+                        Text { visible: !searchField.text.length; anchors.right: parent.right; anchors.rightMargin: 9; anchors.verticalCenter: parent.verticalCenter; text: "Ctrl K"; color: Theme.muted; font.pixelSize: 9 }
                         Keys.onEscapePressed: { clear(); focus = false }
                     }
                     ActionButton { text: "新建日程"; iconName: "plus"; primary: true; implicitHeight: 35; onClicked: window.openNewEvent() }
@@ -250,10 +260,11 @@ ApplicationWindow {
                         clip: true
                         model: calendarStore.visibleEvents
                         spacing: 0
-                        ScrollBar.vertical: ScrollBar { }
+                        ScrollBar.vertical: SlimScrollBar { }
                         delegate: Item {
                             required property var modelData
                             width: agendaList.width; height: 82
+                            Rectangle { anchors.fill: parent; anchors.margins: 3; radius: 9; color: agendaMouse.containsMouse ? Theme.hover : "transparent" }
                             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line }
                             RowLayout {
                                 anchors.fill: parent; anchors.margins: 12; spacing: 16
@@ -266,7 +277,7 @@ ApplicationWindow {
                                 }
                                 Icon { name: "right"; width: 15; height: 15; color: Theme.muted }
                             }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { calendarStore.selectDate(modelData.date); editor.edit(modelData) } }
+                            MouseArea { id: agendaMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { calendarStore.selectDate(modelData.date); editor.edit(modelData) } }
                         }
                         Column {
                             anchors.centerIn: parent; spacing: 12; visible: agendaList.count === 0
@@ -330,6 +341,7 @@ ApplicationWindow {
                     Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 120
                     clip: true
                     contentWidth: availableWidth
+                    ScrollBar.vertical: SlimScrollBar { }
                     Column {
                         width: dayScroll.availableWidth
                         spacing: 11
@@ -339,7 +351,8 @@ ApplicationWindow {
                                 id: dayCard
                                 required property var modelData
                                 width: parent.width; height: 120; radius: 11
-                                color: Theme.surface; border.color: Theme.line
+                                color: dayCardMouse.containsMouse ? Theme.hover : Theme.surface
+                                border.color: dayCardMouse.containsMouse ? Theme.lineStrong : Theme.line
                                 Column {
                                     anchors.fill: parent; anchors.margins: 15; spacing: 10
                                     Row {
@@ -350,7 +363,7 @@ ApplicationWindow {
                                     Text { width: parent.width; text: dayCard.modelData.title; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium; elide: Text.ElideRight }
                                     Text { width: parent.width; text: dayCard.modelData.notes.length ? dayCard.modelData.notes : dayCard.modelData.calendarName + "日历"; color: Theme.muted; font.pixelSize: 10; elide: Text.ElideRight }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: editor.edit(dayCard.modelData) }
+                                MouseArea { id: dayCardMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: editor.edit(dayCard.modelData) }
                             }
                         }
                         Column {
@@ -370,6 +383,7 @@ ApplicationWindow {
                         id: nextEvent
                         required property var modelData
                         Layout.fillWidth: true; implicitHeight: 61
+                        Rectangle { anchors.fill: parent; anchors.margins: -5; radius: 8; color: nextEventMouse.containsMouse ? Theme.hover : "transparent" }
                         RowLayout {
                             anchors.fill: parent; spacing: 11
                             Rectangle { width: 3; height: 28; radius: 2; color: nextEvent.modelData.color; opacity: 0.7 }
@@ -379,7 +393,7 @@ ApplicationWindow {
                                 Text { text: nextEvent.modelData.dateLabel + " · " + nextEvent.modelData.timeLabel; color: Theme.muted; font.pixelSize: 9 }
                             }
                         }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { calendarStore.selectDate(nextEvent.modelData.date); editor.edit(nextEvent.modelData) } }
+                        MouseArea { id: nextEventMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { calendarStore.selectDate(nextEvent.modelData.date); editor.edit(nextEvent.modelData) } }
                     }
                 }
                 Text { visible: calendarStore.upcomingEvents.length === 0; Layout.topMargin: 12; Layout.bottomMargin: 14; text: "还没有接下来的安排"; color: Theme.muted; font.pixelSize: 11 }
@@ -410,36 +424,67 @@ ApplicationWindow {
     Dialog {
         id: settingsDialog
         parent: Overlay.overlay; anchors.centerIn: parent
-        width: 430; padding: 26; modal: true
-        background: Rectangle { color: Theme.surface; radius: 18; border.color: Theme.line }
-        Overlay.modal: Rectangle { color: "#650E211A" }
+        width: 470; padding: 28; modal: true
+        background: Rectangle { color: Theme.surface; radius: 18; border.color: Theme.lineStrong }
+        Overlay.modal: Rectangle { color: Theme.overlay }
         contentItem: ColumnLayout {
-            spacing: 21
+            spacing: 20
             RowLayout {
-                Text { text: "偏好设置"; color: Theme.text; font.pixelSize: 22; font.weight: Font.DemiBold }
+                Layout.fillWidth: true
+                spacing: 12
+                Rectangle { width: 42; height: 42; radius: 12; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: "settings"; width: 22; height: 22; color: Theme.accent } }
+                ColumnLayout {
+                    spacing: 5
+                    Text { text: "偏好设置"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
+                    Text { text: "让日笺更适合你的日常"; color: Theme.muted; font.pixelSize: 11 }
+                }
                 Item { Layout.fillWidth: true }
                 ActionButton { iconName: "close"; hint: "关闭"; quiet: true; onClicked: settingsDialog.close() }
             }
-            RowLayout {
-                ColumnLayout {
-                    spacing: 6
-                    Text { text: "深色外观"; color: Theme.text; font.pixelSize: 13 }
-                    Text { text: "为夜晚的灵感，调暗一点光。"; color: Theme.muted; font.pixelSize: 11 }
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 78
+                radius: 12; color: Theme.input; border.color: Theme.line
+                RowLayout {
+                    anchors.fill: parent; anchors.margins: 16
+                    ColumnLayout {
+                        spacing: 7
+                        Text { text: "深色外观"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
+                        Text { text: "为夜晚的灵感，调暗一点光"; color: Theme.muted; font.pixelSize: 11 }
+                    }
+                    Item { Layout.fillWidth: true }
+                    Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked; Accessible.name: "深色外观" }
                 }
-                Item { Layout.fillWidth: true }
-                Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked }
             }
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: desktopSettings.implicitHeight + 32
+                radius: 12; color: Theme.input; border.color: Theme.line
+                ColumnLayout {
+                    id: desktopSettings
+                    anchors.fill: parent; anchors.margins: 16; spacing: 12
+                    RowLayout {
+                        Layout.fillWidth: true
+                        ColumnLayout {
+                            spacing: 7
+                            Text { text: "桌面月历"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { text: "打开电脑，就看见这一天"; color: Theme.muted; font.pixelSize: 11 }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Toggle { enabled: desktopController.supported; checked: desktopController.enabled; onToggled: desktopController.enabled = checked; Accessible.name: "桌面月历" }
+                    }
+                    Text { Layout.fillWidth: true; text: desktopController.supportMessage; color: Theme.secondary; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.4 }
+                    ActionButton { visible: desktopController.needsGnomeBridge && !desktopController.supported; text: "启用桌面桥"; iconName: "desktop"; onClicked: desktopController.enableGnomeBridge() }
+                }
+            }
+            Text { Layout.fillWidth: true; text: "日程保存在本机，iCloud 同步尚未接入。桌面月历右上角可调透明度、锁定位置或返回此窗口。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
-            Text { text: "日笺  0.1 · 界面预览版"; color: Theme.secondary; font.pixelSize: 12 }
             RowLayout {
                 Layout.fillWidth: true
-                Text { text: "桌面月历"; color: Theme.text; font.pixelSize: 13 }
+                Text { text: "日笺 · Dayline"; color: Theme.secondary; font.pixelSize: 11 }
                 Item { Layout.fillWidth: true }
-                Toggle { enabled: desktopController.supported; checked: desktopController.enabled; onToggled: desktopController.enabled = checked }
+                Text { text: Qt.application.version; color: Theme.muted; font.pixelSize: 10 }
             }
-            Text { Layout.fillWidth: true; text: desktopController.supportMessage; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
-            ActionButton { visible: desktopController.needsGnomeBridge && !desktopController.supported; text: "启用桌面桥"; onClicked: desktopController.enableGnomeBridge() }
-            Text { Layout.fillWidth: true; text: "日程保存在本机，iCloud 同步尚未接入。桌面月历右上角可调透明度、锁定位置或返回此窗口。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
         }
     }
 }

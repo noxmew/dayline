@@ -72,7 +72,11 @@ ApplicationWindow {
                 Rectangle { width: 1; height: 20; color: Theme.line }
                 ActionButton { iconName: "plus"; hint: "新建日程"; quiet: true; onClicked: desktop.openNewEvent() }
                 ActionButton { iconName: "desktop"; hint: "打开日历窗口"; quiet: true; onClicked: desktopController.openManager() }
-                ActionButton { iconName: "settings"; hint: "桌面外观与设置"; quiet: true; onClicked: appearanceMenu.popup() }
+                ActionButton {
+                    id: appearanceButton
+                    iconName: "settings"; hint: "桌面外观与设置"; quiet: true
+                    onClicked: appearanceMenu.popup(appearanceButton, appearanceButton.width - appearanceMenu.width, appearanceButton.height + 8)
+                }
             }
 
             Row {
@@ -136,35 +140,18 @@ ApplicationWindow {
         }
     }
 
-    Menu {
-        id: appearanceMenu
-        width: 250
-        MenuItem { text: "桌面外观"; enabled: false }
-        MenuItem { text: "锁定位置"; checkable: true; checked: desktopController.locked; onTriggered: desktopController.locked = !desktopController.locked }
-        MenuItem { text: "深色外观"; checkable: true; checked: calendarStore.darkMode; onTriggered: calendarStore.darkMode = !calendarStore.darkMode }
-        MenuSeparator {}
-        MenuItem { text: "背景透明度  " + Math.round(desktopController.panelOpacity * 100) + "%"; enabled: false }
-        Slider {
-            width: appearanceMenu.width - 28
-            x: 14
-            from: 0.25; to: 1.0
-            value: desktopController.panelOpacity
-            onMoved: desktopController.panelOpacity = value
-        }
-        MenuSeparator {}
-        MenuItem { text: "重置大小与位置"; onTriggered: desktopController.resetPosition() }
-        MenuItem { text: "返回窗口模式"; onTriggered: desktopController.enabled = false }
-        MenuItem { text: "退出日笺"; onTriggered: Qt.quit() }
-    }
+    DesktopAppearanceMenu { id: appearanceMenu }
 
-    Menu {
+    SurfaceMenu {
         id: contextMenu
-        MenuItem { text: "新建日程"; onTriggered: desktop.openNewEvent() }
-        MenuItem { text: "打开日历窗口"; onTriggered: desktopController.openManager() }
-        MenuItem { text: "锁定位置"; checkable: true; checked: desktopController.locked; onTriggered: desktopController.locked = !desktopController.locked }
-        MenuItem { text: "返回窗口模式"; onTriggered: desktopController.enabled = false }
-        MenuSeparator {}
-        MenuItem { text: "退出日笺"; onTriggered: Qt.quit() }
+        MenuEntry { text: "新建日程"; iconName: "plus"; onTriggered: desktop.openNewEvent() }
+        MenuEntry { text: "打开日历窗口"; iconName: "calendar"; onTriggered: desktopController.openManager() }
+        MenuRule { }
+        MenuEntry { text: "桌面外观"; iconName: "settings"; onTriggered: appearanceMenu.popup() }
+        MenuEntry { text: "锁定位置"; iconName: desktopController.locked ? "lock" : "unlock"; checkable: true; checked: desktopController.locked; onTriggered: desktopController.locked = !desktopController.locked }
+        MenuEntry { text: "返回窗口模式"; iconName: "desktop"; onTriggered: desktopController.enabled = false }
+        MenuRule { }
+        MenuEntry { text: "退出日笺"; iconName: "power"; danger: true; onTriggered: Qt.quit() }
     }
 
     EventEditor { id: editor }

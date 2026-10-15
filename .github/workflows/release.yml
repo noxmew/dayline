@@ -1,0 +1,181 @@
+name: Build and publish Ubuntu packages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_VERSION: 0.1.${{ github.run_number }}
+  RELEASE_TAG: v0.1.${{ github.run_number }}
+
+# Every push keeps its own run and version. A global concurrency group would
+# discard intermediate pending pushes when several builds arrive together.
+jobs:
+  build:
+    name: Ubuntu 24.04 / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - name: Check out the pushed source commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install build and runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential cmake ninja-build pkg-config libxcb1-dev libical-dev \
+            qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools \
+            qt6-qpa-plugins libqt6sql6-sqlite \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-window qml6-module-qtquick-templates
+
+      - name: Build the release version
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DDAYLINE_VERSION="$RELEASE_VERSION"
+          cmake --build build --parallel 4
+
+      - name: Package and verify the Debian metadata and executable
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          cpack --config build/CPackConfig.cmake -B dist
+          package="dist/dayline_${RELEASE_VERSION}_${PACKAGE_ARCH}.deb"
+          [[ -f "$package" ]]
+          [[ "$(dpkg-deb --field "$package" Package)" == dayline ]]
+          [[ "$(dpkg-deb --field "$package" Version)" == "$RELEASE_VERSION" ]]
+          [[ "$(dpkg-deb --field "$package" Architecture)" == "$PACKAGE_ARCH" ]]
+          [[ "$(dpkg --print-architecture)" == "$PACKAGE_ARCH" ]]
+          dpkg-deb --info "$package"
+          dpkg-deb --extract "$package" "$RUNNER_TEMP/dayline-package"
+          [[ -x "$RUNNER_TEMP/dayline-package/usr/bin/dayline" ]]
+          [[ -f "$RUNNER_TEMP/dayline-package/usr/share/applications/dayline.desktop" ]]
+          [[ -f "$RUNNER_TEMP/dayline-package/usr/share/doc/dayline/copyright" ]]
+          actual_version="$(QT_QPA_PLATFORM=offscreen "$RUNNER_TEMP/dayline-package/usr/bin/dayline" --version)"
+          [[ "$actual_version" == "Dayline $RELEASE_VERSION" ]]
+          mkdir -p artifacts
+          mv "$package" "artifacts/dayline_${RELEASE_VERSION}_ubuntu24.04_${PACKAGE_ARCH}.deb"
+
+      - name: Upload the Ubuntu package
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayline-ubuntu24.04-${{ matrix.arch }}
+          path: artifacts/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish the verified packages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download both native builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dayline-ubuntu24.04-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums and identify the source version
+        run: |
+          [[ "$(find dist -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 2 ]]
+          for arch in amd64 arm64; do
+            package="dist/dayline_${RELEASE_VERSION}_ubuntu24.04_${arch}.deb"
+            [[ -f "$package" ]]
+            [[ "$(dpkg-deb --field "$package" Version)" == "$RELEASE_VERSION" ]]
+            [[ "$(dpkg-deb --field "$package" Architecture)" == "$arch" ]]
+          done
+          cd dist
+          sha256sum ./*.deb > SHA256SUMS
+
+      - name: Publish the exact source commit without replacing existing assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          marker="dayline-action-run:${GITHUB_RUN_ID}"
+          releases="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" --slurp)"
+          existing="$(jq -r --arg marker "$marker" --arg tag "$RELEASE_TAG" \
+            '.[][] | select(.tag_name == $tag or ((.body // "") | contains($marker))) | .tag_name' \
+            <<< "$releases")"
+          [[ -z "$existing" ]] || {
+            echo "::error::A Release or draft already exists for this run or version: ${existing}. Inspect it before retrying; assets will not be replaced."
+            exit 1
+          }
+          tags="$(gh api --paginate "repos/${GH_REPO}/tags?per_page=100" --jq '.[].name')"
+          if grep -Fxq "$RELEASE_TAG" <<< "$tags"; then
+            echo "::error::Tag ${RELEASE_TAG} already exists. Inspect it before retrying."
+            exit 1
+          fi
+
+          cat > "$RUNNER_TEMP/dayline-release-notes.md" <<EOF
+          日笺 Dayline ${RELEASE_VERSION} · Linux 桌面日历预览版
+
+          安装包基于 Ubuntu 24.04，分别在 amd64 和 ARM64 原生运行器构建。Qt 等运行库由系统包管理器安装，未打入安装包。
+
+          下载与你的系统架构对应的 .deb，在下载目录执行：
+
+          \`sudo apt install ./dayline_${RELEASE_VERSION}_ubuntu24.04_amd64.deb\`
+
+          ARM64 将文件名末尾的 amd64 换为 arm64。安装后在应用菜单打开“日笺”，或执行 \`dayline\`；\`dayline --desktop\` 启动桌面模式。
+
+          桌面模式依赖桌面环境。GNOME Wayland 需要用户启用安装包附带的 Dayline Desktop Bridge 扩展（GNOME Shell 46），其他会话须确认 X11/EWMH 支持。
+          统信 UOS/DDE 尚未完成实机验证；本次构建不声明 UOS 兼容。iCloud 同步需 Apple App 专用密码与可用的系统密钥环，尚待真实账户联调。
+
+          下载 SHA256SUMS 后校验对应安装包：\`sha256sum -c --ignore-missing SHA256SUMS\`。
+          源码和安装包版本一致，构建提交：${GITHUB_SHA}。
+
+          <!-- ${marker} -->
+          EOF
+
+          gh release create "$RELEASE_TAG" dist/*.deb dist/SHA256SUMS \
+            --target "$GITHUB_SHA" --title "Dayline ${RELEASE_VERSION}" \
+            --notes-file "$RUNNER_TEMP/dayline-release-notes.md" --draft --latest=false
+
+          draft="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" --slurp | \
+            jq -ce --arg tag "$RELEASE_TAG" --arg marker "$marker" \
+              '[.[][] | select(.tag_name == $tag and ((.body // "") | contains($marker)))] |
+               if length == 1 then .[0] else error("Expected exactly one draft for this workflow run") end')"
+          release_id="$(jq -r '.id' <<< "$draft")"
+          release_json="$(gh api "repos/${GH_REPO}/releases/${release_id}")"
+          jq -e --arg tag "$RELEASE_TAG" \
+            '.tag_name == $tag and .draft == true and (.assets | length) == 3' \
+            <<< "$release_json" > /dev/null
+          for asset in dist/*.deb dist/SHA256SUMS; do
+            name="$(basename "$asset")"
+            size="$(stat -c %s "$asset")"
+            digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
+            jq -e --arg name "$name" --argjson size "$size" --arg digest "$digest" \
+              '.assets | any(.[]; .name == $name and .size == $size and .digest == $digest)' \
+              <<< "$release_json" > /dev/null
+          done
+
+          # GitHub selects the latest semantic version, so a slower older build
+          # finishing after a newer push cannot become the latest download.
+          gh api --method PATCH "repos/${GH_REPO}/releases/${release_id}" \
+            -F draft=false -f make_latest=legacy > /dev/null
+          published="$(gh api "repos/${GH_REPO}/releases/tags/${RELEASE_TAG}")"
+          jq -e '.draft == false and .prerelease == false and (.assets | length) == 3' \
+            <<< "$published" > /dev/null
+          commit="$(gh api "repos/${GH_REPO}/commits/${RELEASE_TAG}" --jq '.sha')"
+          [[ "$commit" == "$GITHUB_SHA" ]] || {
+            echo '::error::The published tag does not point to the built source commit.'
+            exit 1
+          }

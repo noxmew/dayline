@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setOrganizationName("Dayline");
     app.setApplicationName("Dayline");
-    app.setApplicationVersion("0.1.0");
+    app.setApplicationVersion(DAYLINE_VERSION);
     app.setDesktopFileName("dayline");
     app.setFont(QFont("Noto Sans CJK SC", 10));
     QQuickStyle::setStyle("Basic");
