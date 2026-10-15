@@ -7,6 +7,8 @@ project(Dayline VERSION ${DAYLINE_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+option(DAYLINE_BUNDLE_RUNTIME "Install a private runtime from a glibc 2.28 SDK" OFF)
+set(DAYLINE_RUNTIME_PREFIX "" CACHE PATH "Private release SDK prefix")
 find_package(Qt6 6.4 REQUIRED COMPONENTS Quick QuickControls2 Sql DBus Network)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 find_path(ICAL_INCLUDE_DIR libical/ical.h REQUIRED)
@@ -14,6 +16,22 @@ find_library(ICAL_LIBRARY NAMES ical libical.so.3 REQUIRED)
 find_path(XCB_INCLUDE_DIR xcb/xcb.h REQUIRED)
 find_library(XCB_LIBRARY xcb REQUIRED)
 qt_standard_project_setup()
+
+if(DAYLINE_BUNDLE_RUNTIME)
+    if(NOT IS_ABSOLUTE "${DAYLINE_RUNTIME_PREFIX}" OR NOT IS_DIRECTORY "${DAYLINE_RUNTIME_PREFIX}")
+        message(FATAL_ERROR "DAYLINE_BUNDLE_RUNTIME requires an absolute DAYLINE_RUNTIME_PREFIX")
+    endif()
+    file(REAL_PATH "${DAYLINE_RUNTIME_PREFIX}" DAYLINE_RUNTIME_PREFIX)
+    foreach(runtime_path IN ITEMS "${Qt6Core_DIR}" "${Qt6Quick_DIR}" "${OPENSSL_CRYPTO_LIBRARY}" "${ICAL_LIBRARY}")
+        file(REAL_PATH "${runtime_path}" resolved_runtime_path)
+        string(FIND "${resolved_runtime_path}" "${DAYLINE_RUNTIME_PREFIX}/" runtime_prefix_position)
+        if(NOT runtime_prefix_position EQUAL 0)
+            message(FATAL_ERROR "Release dependency is outside DAYLINE_RUNTIME_PREFIX: ${runtime_path}")
+        endif()
+    endforeach()
+    find_program(DAYLINE_PYTHON_EXECUTABLE python3 REQUIRED)
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+endif()
 
 string(HEX "$ENV{DAYLINE_UPDATE_PROXY_BASE}" DAYLINE_UPDATE_PROXY_HEX)
 configure_file(src/updateconfig.h.in generated/updateconfig.h @ONLY)
@@ -61,7 +79,17 @@ qt_add_qml_module(dayline
 target_include_directories(dayline PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/generated ${XCB_INCLUDE_DIR} ${ICAL_INCLUDE_DIR})
 target_compile_definitions(dayline PRIVATE DAYLINE_VERSION="${PROJECT_VERSION}")
 target_link_libraries(dayline PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql Qt6::DBus Qt6::Network OpenSSL::Crypto ${XCB_LIBRARY} ${ICAL_LIBRARY})
-install(TARGETS dayline RUNTIME DESTINATION bin)
+if(DAYLINE_BUNDLE_RUNTIME)
+    set_target_properties(dayline PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+    install(TARGETS dayline RUNTIME DESTINATION lib/dayline)
+    install(PROGRAMS platform/linux/dayline DESTINATION bin)
+    install(FILES platform/linux/qt.conf DESTINATION lib/dayline)
+    configure_file(cmake/InstallRuntime.cmake.in generated/InstallRuntime.cmake @ONLY)
+    install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/generated/InstallRuntime.cmake")
+    install(FILES scripts/build-runtime-sdk.sh DESTINATION share/doc/dayline/runtime)
+else()
+    install(TARGETS dayline RUNTIME DESTINATION bin)
+endif()
 install(FILES assets/dayline.desktop DESTINATION share/applications)
 install(FILES assets/dayline.svg DESTINATION share/icons/hicolor/scalable/apps)
 install(FILES LICENSE DESTINATION share/doc/dayline RENAME copyright)
@@ -81,6 +109,9 @@ set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 # On amd64/arm64, Ubuntu's t64 packages and UOS 25's original package names
 # provide the same required SONAMEs. Keep both names with the same ABI floor.
 # The release workflow checks the executable's versioned ABI requirements.
+if(NOT DAYLINE_BUNDLE_RUNTIME)
+# Private packages derive exact dependencies from the installed ELF closure;
+# scripts/package-runtime-deb.sh packages them instead of CPack.
 set(DAYLINE_DEBIAN_DEPENDENCIES
     "libc6 (>= 2.38)"
     "libgcc-s1"
@@ -88,6 +119,9 @@ set(DAYLINE_DEBIAN_DEPENDENCIES
     "libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4)"
     "libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4)"
     "libqt6qml6 (>= 6.4)"
+    # QtQuick loads this backing library, which registers QtQml.Models and
+    # embeds its qmldir. The separate modelsplugin is optional in Qt >= 6.4.
+    "libqt6qmlmodels6 (>= 6.4)"
     "libqt6quick6 (>= 6.4)"
     "libqt6quickcontrols2-6 (>= 6.4)"
     "libqt6sql6t64 (>= 6.4) | libqt6sql6 (>= 6.4)"
@@ -104,7 +138,7 @@ set(DAYLINE_DEBIAN_DEPENDENCIES
     "qml6-module-qtquick-window"
     "qml6-module-qtquick-templates"
     "qml6-module-qtqml-workerscript"
-    "qml6-module-qtqml-models"
 )
 list(JOIN DAYLINE_DEBIAN_DEPENDENCIES ", " CPACK_DEBIAN_PACKAGE_DEPENDS)
 include(CPack)
+endif()

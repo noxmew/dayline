@@ -1,0 +1,4 @@
+#!/bin/sh
+unset QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML_IMPORT_PATH QML2_IMPORT_PATH
+dayline_directory=$(CDPATH= cd -- "$(dirname -- "$0")/../lib/dayline" && pwd) || exit 1
+exec "$dayline_directory/dayline" "$@"

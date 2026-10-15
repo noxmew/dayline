@@ -1,0 +1,9 @@
+execute_process(
+    COMMAND "@DAYLINE_PYTHON_EXECUTABLE@" "@CMAKE_CURRENT_SOURCE_DIR@/scripts/bundle-runtime.py"
+        --sdk "@DAYLINE_RUNTIME_PREFIX@"
+        --root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}"
+    RESULT_VARIABLE runtime_result
+)
+if(NOT runtime_result EQUAL 0)
+    message(FATAL_ERROR "Private runtime installation failed: ${runtime_result}")
+endif()
