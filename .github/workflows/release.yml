@@ -79,7 +79,7 @@ jobs:
           actual_version="$(QT_QPA_PLATFORM=offscreen "$RUNNER_TEMP/dayline-package/usr/bin/dayline" --version)"
           [[ "$actual_version" == "Dayline $RELEASE_VERSION" ]]
           mkdir -p artifacts
-          mv "$package" "artifacts/dayline_${RELEASE_VERSION}_ubuntu24.04_${PACKAGE_ARCH}.deb"
+          mv "$package" artifacts/
 
       - name: Upload the Ubuntu package
         uses: actions/upload-artifact@v4
@@ -108,7 +108,7 @@ jobs:
         run: |
           [[ "$(find dist -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 2 ]]
           for arch in amd64 arm64; do
-            package="dist/dayline_${RELEASE_VERSION}_ubuntu24.04_${arch}.deb"
+            package="dist/dayline_${RELEASE_VERSION}_${arch}.deb"
             [[ -f "$package" ]]
             [[ "$(dpkg-deb --field "$package" Version)" == "$RELEASE_VERSION" ]]
             [[ "$(dpkg-deb --field "$package" Architecture)" == "$arch" ]]
@@ -145,7 +145,7 @@ jobs:
 
           下载与你的系统架构对应的 .deb，在下载目录执行：
 
-          \`sudo apt install ./dayline_${RELEASE_VERSION}_ubuntu24.04_amd64.deb\`
+          \`sudo apt install ./dayline_${RELEASE_VERSION}_amd64.deb\`
 
           ARM64 将文件名末尾的 amd64 换为 arm64。安装后在应用菜单打开“日笺”，或执行 \`dayline\`；\`dayline --desktop\` 启动桌面模式。
 

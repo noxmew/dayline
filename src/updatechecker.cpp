@@ -254,7 +254,7 @@ private:
         if (QVersionNumber::compare(latest, current) <= 0) {
             emit snapshot("current", "当前已是最新版本。", m_version, {}, {}, {}, 0); return;
         }
-        m_name = "dayline_" + m_version + "_ubuntu24.04_" + architecture() + ".deb";
+        m_name = "dayline_" + m_version + '_' + architecture() + ".deb";
         QJsonObject asset;
         int matches = 0;
         for (const auto &value : release.value("assets").toArray()) {
