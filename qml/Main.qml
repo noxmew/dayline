@@ -18,6 +18,7 @@ ApplicationWindow {
 
     function openNewEvent() { editor.create(calendarStore.selectedDate) }
     function openICloud() { cloudDialog.open() }
+    function openUpdates() { updateDialog.open() }
     Shortcut { sequence: "Ctrl+N"; onActivated: window.openNewEvent() }
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequence: "PgUp"; onActivated: calendarStore.changeMonth(-1) }
@@ -423,6 +424,7 @@ ApplicationWindow {
     EventEditor { id: editor; originWindow: window }
 
     ICloudSettings { id: cloudDialog; originWindow: window }
+    UpdateSettings { id: updateDialog; originWindow: window }
 
     Dialog {
         id: desktopUnavailableDialog
@@ -485,6 +487,7 @@ ApplicationWindow {
             ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }
             Text { Layout.fillWidth: true; text: "本机日历留在当前设备。选择 iCloud 日历记录的日程会先保存在本机，再同步到云端。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
+            ActionButton { text: "检查更新"; iconName: "refresh"; onClicked: { settingsDialog.close(); window.openUpdates() } }
             RowLayout {
                 Layout.fillWidth: true
                 Text { text: "日笺 · Dayline"; color: Theme.secondary; font.pixelSize: 11 }

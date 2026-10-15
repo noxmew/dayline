@@ -1,6 +1,7 @@
 #include "calendarstore.h"
 #include "desktopcontroller.h"
 #include "icloudsync.h"
+#include "updatechecker.h"
 
 #include <QCommandLineParser>
 #include <QDir>
@@ -35,6 +36,7 @@ int main(int argc, char *argv[])
     parser.addOption({"screenshot", "Save the rendered window to a PNG and exit.", "file"});
     parser.addOption({"show-editor", "Open the event editor on launch."});
     parser.addOption({"show-icloud", "Open iCloud account settings on launch."});
+    parser.addOption({"show-updates", "Open application update settings on launch."});
     parser.addOption({"theme", "Choose light or dark appearance.", "theme"});
     parser.process(app);
 
@@ -55,6 +57,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     store.attachICloud(&iCloud);
+    UpdateChecker updater;
     DesktopController desktop(parser.isSet("demo"), parser.isSet("desktop"));
     if (parser.isSet("desktop") && !desktop.supported()) {
         qCritical().noquote() << desktop.supportMessage();
@@ -66,6 +69,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("calendarStore", &store);
     engine.rootContext()->setContextProperty("iCloudSync", &iCloud);
     engine.rootContext()->setContextProperty("desktopController", &desktop);
+    engine.rootContext()->setContextProperty("updateChecker", &updater);
     engine.load(QUrl("qrc:/qt/qml/Dayline/qml/Main.qml"));
     if (engine.rootObjects().isEmpty()) return 1;
     auto *manager = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
@@ -81,16 +85,21 @@ int main(int argc, char *argv[])
         QTimer::singleShot(100, &engine, [&engine] {
             QMetaObject::invokeMethod(engine.rootObjects().first(), "openICloud");
         });
+    if (parser.isSet("show-updates"))
+        QTimer::singleShot(100, &engine, [&engine, &desktop] {
+            QMetaObject::invokeMethod(desktop.enabled() ? engine.rootObjects().last() : engine.rootObjects().first(), "openUpdates");
+        });
 
     if (parser.isSet("screenshot")) {
         const QString path = parser.value("screenshot");
         const bool showEditor = parser.isSet("show-editor");
         const bool showICloud = parser.isSet("show-icloud");
-        QTimer::singleShot(1200, &app, [&app, &engine, &desktop, path, showEditor, showICloud] {
+        const bool showUpdates = parser.isSet("show-updates");
+        QTimer::singleShot(1200, &app, [&app, &engine, &desktop, path, showEditor, showICloud, showUpdates] {
             auto *window = qobject_cast<QQuickWindow *>(desktop.enabled() ? engine.rootObjects().last() : engine.rootObjects().first());
-            if (showEditor || showICloud) {
+            if (showEditor || showICloud || showUpdates) {
                 for (auto *candidate : app.allWindows()) {
-                    if (candidate->objectName() == (showICloud ? "icloudSettings" : "eventEditor") && candidate->isVisible()) {
+                    if (candidate->objectName() == (showUpdates ? "updateSettings" : showICloud ? "icloudSettings" : "eventEditor") && candidate->isVisible()) {
                         window = qobject_cast<QQuickWindow *>(candidate);
                         break;
                     }

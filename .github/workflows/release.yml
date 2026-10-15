@@ -48,7 +48,14 @@ jobs:
             qml6-module-qtquick-window qml6-module-qtquick-templates
 
       - name: Build the release version
+        env:
+          DAYLINE_UPDATE_PROXY_BASE: ${{ secrets.DAYLINE_UPDATE_PROXY_BASE }}
         run: |
+          if [[ -z "$DAYLINE_UPDATE_PROXY_BASE" ]]; then
+            echo '::error::Configure the DAYLINE_UPDATE_PROXY_BASE repository secret before publishing an update-enabled package.'
+            exit 1
+          fi
+          python3 -c 'import os; print("::add-mask::" + os.environ["DAYLINE_UPDATE_PROXY_BASE"].encode("utf-8").hex())'
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DDAYLINE_VERSION="$RELEASE_VERSION"
           cmake --build build --parallel 4
