@@ -128,14 +128,21 @@ ApplicationWindow {
                     delegate: Rectangle {
                         id: calendarRow
                         required property var modelData
-                        Layout.fillWidth: true; implicitHeight: 68; radius: 12; color: Theme.input; border.color: Theme.line
+                        Layout.fillWidth: true; implicitHeight: Math.max(68, calendarContent.implicitHeight + 24); radius: 12; color: Theme.input; border.color: Theme.line
                         RowLayout {
+                            id: calendarContent
                             anchors.fill: parent; anchors.margins: 12; spacing: 11
                             Rectangle { width: 10; height: 10; radius: 5; color: calendarRow.modelData.color }
                             ColumnLayout {
                                 spacing: 4; Layout.fillWidth: true
                                 Text { text: calendarRow.modelData.name; color: Theme.text; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
-                                Text { text: !calendarRow.modelData.available ? "暂时不可用" : calendarRow.modelData.writable ? "可读写" : "只读"; color: Theme.muted; font.pixelSize: 10 }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: calendarRow.modelData.available
+                                        ? (calendarRow.modelData.writable ? "可读写" : "只读")
+                                        : "iCloud 列表中已移除 · " + calendarRow.modelData.protectedCount + " 项待处理"
+                                    color: Theme.muted; font.pixelSize: 10; wrapMode: Text.Wrap
+                                }
                             }
                             ActionButton {
                                 visible: calendarRow.modelData.selected && calendarRow.modelData.writable && calendarRow.modelData.available
@@ -143,7 +150,12 @@ ApplicationWindow {
                                 quiet: true; enabled: !iCloudSync.busy
                                 onClicked: iCloudSync.defaultCalendar = calendarRow.modelData.id
                             }
-                            Toggle { checked: calendarRow.modelData.selected; enabled: !iCloudSync.busy && calendarRow.modelData.available; onToggled: iCloudSync.selectCalendar(calendarRow.modelData.id, checked); Accessible.name: "同步" + calendarRow.modelData.name }
+                            Toggle { visible: calendarRow.modelData.available; checked: calendarRow.modelData.selected; enabled: !iCloudSync.busy; onToggled: iCloudSync.selectCalendar(calendarRow.modelData.id, checked); Accessible.name: "同步" + calendarRow.modelData.name }
+                            ActionButton {
+                                visible: !calendarRow.modelData.available
+                                text: "移除本机副本…"; quiet: true; danger: true; enabled: !iCloudSync.busy
+                                onClicked: removeCalendarDialog.request(calendarRow.modelData)
+                            }
                         }
                     }
                 }
@@ -183,6 +195,43 @@ ApplicationWindow {
             }
             ActionButton { visible: iCloudSync.connected; text: "断开 iCloud 账户…"; quiet: true; danger: true; enabled: !iCloudSync.busy; onClicked: disconnectDialog.open() }
             Item { implicitHeight: 10 }
+        }
+    }
+    Dialog {
+        id: removeCalendarDialog
+        property string calendarId: ""
+        property string calendarName: ""
+        property int protectedCount: 0
+        function request(calendar) {
+            calendarId = calendar.id
+            calendarName = calendar.name
+            protectedCount = calendar.protectedCount
+            iCloudSync.clearError()
+            open()
+        }
+        parent: Overlay.overlay; anchors.centerIn: parent; width: 430; padding: 24; modal: true
+        background: Rectangle { radius: 16; color: Theme.surface; border.color: Theme.lineStrong }
+        Overlay.modal: Rectangle { color: Theme.overlay }
+        contentItem: ColumnLayout {
+            spacing: 18
+            Text { text: "移除本机副本？"; color: Theme.text; font.pixelSize: 20; font.weight: Font.DemiBold }
+            Text {
+                Layout.fillWidth: true
+                text: "“" + removeCalendarDialog.calendarName + "”已不在 iCloud 日历列表中。本机还有 "
+                    + removeCalendarDialog.protectedCount + " 项内容未同步或需要处理。移除会删除此日历的全部本机副本，未上传的修改将无法恢复。此操作不会修改 iCloud。"
+                color: Theme.secondary; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.5
+            }
+            InlineNotice { Layout.fillWidth: true; visible: iCloudSync.error.length > 0; error: true; text: iCloudSync.error }
+            RowLayout {
+                Item { Layout.fillWidth: true }
+                ActionButton { text: "暂时保留"; quiet: true; onClicked: removeCalendarDialog.close() }
+                ActionButton {
+                    text: "移除本机副本"; danger: true; primary: true; enabled: !iCloudSync.busy
+                    onClicked: {
+                        if (iCloudSync.removeUnavailableCalendar(removeCalendarDialog.calendarId)) removeCalendarDialog.close()
+                    }
+                }
+            }
         }
     }
     Dialog {

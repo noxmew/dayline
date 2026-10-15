@@ -16,7 +16,8 @@
 #include <algorithm>
 
 namespace {
-struct DavItem { QString href; QMap<QString, QString> properties; QSet<QString> types, privileges; bool calendar = false, collection = false, events = true; };
+struct DavItem { QString href; QMap<QString, QString> properties; QSet<QString> types, privileges; bool calendar = false, collection = false, events = true, typesKnown = false; };
+const QString protectedResource = QStringLiteral("(pending<>'' OR uncertain<>0 OR conflict<>0 OR error<>'' OR raw<>baseline OR remote_raw<>X'' OR remote_etag<>'')");
 QList<DavItem> parseDav(const QByteArray &body, QString *error)
 {
     QXmlStreamReader xml(body);
@@ -34,13 +35,14 @@ QList<DavItem> parseDav(const QByteArray &body, QString *error)
                 QMap<QString, QString> properties;
                 QSet<QString> types, privileges;
                 QString status;
-                bool componentsSeen = false, hasEvents = false;
+                bool componentsSeen = false, hasEvents = false, typesSeen = false;
                 while (xml.readNextStartElement()) {
                     if (xml.name() == QStringLiteral("status")) status = xml.readElementText();
                     else if (xml.name() == QStringLiteral("prop")) {
                         while (xml.readNextStartElement()) {
                             const QString name = xml.name().toString();
                             if (name == "resourcetype" || name == "current-user-privilege-set" || name == "supported-calendar-component-set") {
+                                if (name == "resourcetype") typesSeen = true;
                                 if (name == "supported-calendar-component-set") componentsSeen = true;
                                 int depth = 1;
                                 while (depth && !xml.atEnd()) {
@@ -59,6 +61,7 @@ QList<DavItem> parseDav(const QByteArray &body, QString *error)
                 }
                 if (status.contains(" 200 ")) {
                     item.properties.insert(properties); item.types.unite(types); item.privileges.unite(privileges);
+                    item.typesKnown |= typesSeen;
                     if (componentsSeen) item.events = hasEvents;
                 } else if (!status.contains(" 404 ")) { *error = "iCloud 未能完整返回日历属性，已停止本轮同步。"; return {}; }
             } else if (xml.name() == QStringLiteral("status")) {
@@ -133,6 +136,12 @@ bool ICloudSync::sql(const QString &statement, const QVariantList &values) const
     }
     return query.exec();
 }
+bool ICloudSync::eraseCalendarCache(const QString &id)
+{
+    return sql("DELETE FROM icloud_resources WHERE calendar=?", {id}) &&
+        sql("DELETE FROM icloud_calendars WHERE id=?", {id}) &&
+        sql("UPDATE icloud_account SET default_calendar='' WHERE default_calendar=?", {id});
+}
 void ICloudSync::loadAccount()
 {
     QSqlQuery q(m_db); q.exec("SELECT username,region,home,default_calendar FROM icloud_account WHERE id=1");
@@ -153,15 +162,17 @@ int ICloudSync::pendingCount() const
 QVariantList ICloudSync::calendars() const
 {
     QVariantList list; QSqlQuery q(m_db);
-    q.exec("SELECT id,name,color,writable,selected,available FROM icloud_calendars ORDER BY name");
+    q.exec("SELECT c.id,c.name,c.color,c.writable,c.selected,c.available,"
+           "(SELECT COUNT(*) FROM icloud_resources WHERE calendar=c.id AND " + protectedResource + ") "
+           "FROM icloud_calendars c ORDER BY c.name");
     while (q.next()) list.append(QVariantMap {{"id", q.value(0)}, {"name", q.value(1)}, {"color", q.value(2)},
-        {"writable", q.value(3).toBool()}, {"selected", q.value(4).toBool()}, {"enabled", q.value(4).toBool()}, {"available", q.value(5).toBool()}, {"cloud", true}});
+        {"writable", q.value(3).toBool()}, {"selected", q.value(4).toBool()}, {"enabled", q.value(4).toBool()}, {"available", q.value(5).toBool()}, {"protectedCount", q.value(6).toInt()}, {"cloud", true}});
     return list;
 }
 QVariantList ICloudSync::conflicts() const
 {
     QVariantList list; QSqlQuery q(m_db);
-    q.exec("SELECT r.id,r.raw,r.remote_raw,r.remote_etag,r.pending,c.name,r.error,r.conflict FROM icloud_resources r JOIN icloud_calendars c ON c.id=r.calendar WHERE r.conflict=1 OR r.error<>''");
+    q.exec("SELECT r.id,r.raw,r.remote_raw,r.remote_etag,r.pending,c.name,r.error,r.conflict FROM icloud_resources r JOIN icloud_calendars c ON c.id=r.calendar WHERE c.available=1 AND (r.conflict=1 OR r.error<>'')");
     while (q.next()) list.append(QVariantMap {{"id", q.value(0)}, {"localTitle", ICalResource::title(q.value(1).toByteArray())},
         {"remoteTitle", q.value(3).toString() == "@deleted" ? "云端已删除" : ICalResource::title(q.value(2).toByteArray())},
         {"deleted", q.value(3).toString() == "@deleted"}, {"deleting", q.value(4).toString() == "delete"},
@@ -179,9 +190,11 @@ QVariantList ICloudSync::events(const QDate &from, const QDate &until) const
             auto event = item.toMap();
             event["id"] = q.value(0); event["calendar"] = q.value(4); event["calendarName"] = q.value(5); event["color"] = q.value(6);
             event["cloud"] = true;
-            event["syncState"] = q.value(3).toBool() ? "需处理" : q.value(2).toString().isEmpty() ? "已同步" : "待同步";
+            event["syncState"] = !q.value(8).toBool() ? "日历已移除" : q.value(3).toBool() ? "需处理" : q.value(2).toString().isEmpty() ? "已同步" : "待同步";
             if (!q.value(7).toBool() || !q.value(8).toBool() || q.value(3).toBool()) {
-                event["readOnly"] = true; event["readOnlyReason"] = q.value(3).toBool() ? "此日程存在同步冲突，请先在 iCloud 设置中处理。" : "此日历只读或暂时不可用。";
+                event["readOnly"] = true;
+                event["readOnlyReason"] = !q.value(8).toBool() ? "此日历已不在 iCloud 列表中，本机副本已保留，请在 iCloud 设置中处理。" :
+                    q.value(3).toBool() ? "此日程存在同步冲突，请先在 iCloud 设置中处理。" : "此日历为只读。";
             }
             list.append(event);
         }
@@ -218,7 +231,8 @@ void ICloudSync::request(const QByteArray &method, const QUrl &url, const QByteA
             if (redirects >= 5 || !allowed(destination)) { r.error = "iCloud 服务重定向无效，已停止连接。"; done(r); return; }
             this->request(method, destination, body, headers, done, redirects + 1); return;
         }
-        if (reply->error() != QNetworkReply::NoError && r.status == 0) r.error = "网络或 HTTPS 连接失败。请检查联网状态和系统时间；本机修改已保留。";
+        if (reply->error() != QNetworkReply::NoError && (r.status == 0 || (r.status >= 200 && r.status < 300)))
+            r.error = "网络或 HTTPS 连接失败。请检查联网状态和系统时间；本机修改已保留。";
         if (r.status == 401) { m_authRequired = true; m_password.clear(); m_retry.stop(); }
         reply->deleteLater(); done(r);
     });
@@ -288,12 +302,20 @@ void ICloudSync::discoverCalendars(Completion done)
 {
     request("PROPFIND", QUrl(m_home), propfind("<d:resourcetype/><d:displayname/><a:calendar-color/><d:current-user-privilege-set/><c:supported-calendar-component-set/>"), {{"Depth","1"}},
             [this, done](const Response &r) {
-        if (r.status != 207) { if (r.status == 401) m_password.clear(); fail(networkError(r), r.retryAfter); done(false); return; }
+        if (r.status != 207 || !r.error.isEmpty()) { if (r.status == 401) m_password.clear(); fail(networkError(r), r.retryAfter); done(false); return; }
         QString error; const auto rows = parseDav(r.body, &error);
         if (!error.isEmpty()) { fail(error); done(false); return; }
         bool complete = false;
-        for (const auto &row : rows)
-            complete |= row.collection && normalized(r.url.resolved(QUrl(row.href))) == normalized(r.url);
+        QSet<QString> addresses;
+        for (const auto &row : rows) {
+            const QUrl url = r.url.resolved(QUrl(row.href));
+            const QString address = normalized(url);
+            if (!row.typesKnown || !allowed(url) || addresses.contains(address)) {
+                fail("iCloud 没有返回完整的日历集合，已保留原缓存。"); done(false); return;
+            }
+            addresses.insert(address);
+            complete |= row.collection && address == normalized(r.url);
+        }
         if (!complete) { fail("iCloud 没有返回完整的日历集合，已保留原缓存。"); done(false); return; }
         if (!m_db.transaction()) { fail("无法更新日历缓存。"); done(false); return; }
         bool ok = sql("UPDATE icloud_calendars SET available=0");
@@ -307,8 +329,31 @@ void ICloudSync::discoverCalendars(Completion done)
             ok = ok && sql("INSERT INTO icloud_calendars(id,url,name,color,writable) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,color=excluded.color,writable=excluded.writable,available=1",
                 {calendarId(address), address, row.properties.value("displayname", "iCloud 日历"), cleanColor(row.properties.value("calendar-color")), writable});
         }
+        QStringList removed;
+        QSqlQuery missing(m_db);
+        ok = ok && missing.exec("SELECT c.id FROM icloud_calendars c WHERE c.available=0 AND NOT EXISTS "
+                               "(SELECT 1 FROM icloud_resources WHERE calendar=c.id AND " + protectedResource + ")");
+        if (ok) while (missing.next()) removed.append(missing.value(0).toString());
+        ok = ok && !missing.lastError().isValid();
+        missing.finish();
+        for (const auto &id : removed) ok = ok && eraseCalendarCache(id);
+        QString nextDefault = m_default;
+        if (ok && !m_default.isEmpty()) {
+            QSqlQuery preferred(m_db);
+            preferred.prepare("SELECT 1 FROM icloud_calendars WHERE id=? AND available=1 AND selected=1 AND writable=1");
+            preferred.addBindValue(m_default);
+            ok = preferred.exec();
+            const bool validDefault = ok && preferred.next();
+            ok = ok && !preferred.lastError().isValid();
+            preferred.finish();
+            if (ok && !validDefault) {
+                ok = sql("UPDATE icloud_account SET default_calendar='' WHERE id=1");
+                nextDefault.clear();
+            }
+        }
         if (!ok || !m_db.commit()) { m_db.rollback(); fail("日历清单无效或无法保存，已保留原缓存。"); done(false); return; }
-        emit changed(); done(true);
+        m_default = nextDefault;
+        emit changed(); emit dataChanged(); done(true);
     });
 }
 void ICloudSync::sync()
@@ -461,9 +506,14 @@ void ICloudSync::completeSync()
 {
     if (!sql("UPDATE icloud_account SET last_sync=? WHERE id=1", {QDateTime::currentDateTime().toString(Qt::ISODate)})) { fail("无法保存同步时间。"); return; }
     m_busy = false; m_failures = 0; m_retry.stop();
-    m_status = !conflicts().isEmpty() ? "有日程需要处理" : pendingCount() ? "部分修改待同步，请检查日历选择和权限" : "已同步";
-    bool selected = false; for (const auto &c : calendars()) selected |= c.toMap().value("selected").toBool();
-    if (!selected) m_status = "已连接，请选择同步日历";
+    bool selected = false, removed = false;
+    for (const auto &c : calendars()) {
+        const auto calendar = c.toMap();
+        selected |= calendar.value("available").toBool() && calendar.value("selected").toBool();
+        removed |= !calendar.value("available").toBool();
+    }
+    m_status = removed ? "有已移除的日历需要处理" : !conflicts().isEmpty() ? "有日程需要处理" :
+        pendingCount() ? "部分修改待同步，请检查日历选择和权限" : selected ? "已同步" : "已连接，请选择同步日历";
     emit changed(); emit dataChanged();
 }
 void ICloudSync::selectCalendar(const QString &id, bool selected)
@@ -477,6 +527,24 @@ void ICloudSync::selectCalendar(const QString &id, bool selected)
     if (!selected && m_default == id) setDefaultCalendar({});
     if (selected && m_default.isEmpty()) setDefaultCalendar(id);
     emit changed(); emit dataChanged(); if (selected) queueSync();
+}
+bool ICloudSync::removeUnavailableCalendar(const QString &id)
+{
+    if (m_busy || !m_connected) return false;
+    if (!m_db.transaction()) { fail("无法移除本机副本。"); return false; }
+    QSqlQuery calendar(m_db);
+    calendar.prepare("SELECT available FROM icloud_calendars WHERE id=?");
+    calendar.addBindValue(id);
+    if (!calendar.exec() || !calendar.next() || calendar.value(0).toBool()) {
+        m_db.rollback(); fail("日历状态已变化，请重新同步后再操作。"); return false;
+    }
+    calendar.finish();
+    if (!eraseCalendarCache(id) || !m_db.commit()) { m_db.rollback(); fail("无法移除本机副本，内容已保留。"); return false; }
+    if (m_default == id) m_default.clear();
+    m_error.clear();
+    m_status = "已移除本机副本";
+    emit changed(); emit dataChanged();
+    return true;
 }
 void ICloudSync::setDefaultCalendar(const QString &id)
 {

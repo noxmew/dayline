@@ -44,6 +44,7 @@ public:
     Q_INVOKABLE void connectAccount(const QString &account, const QString &password, const QString &region);
     Q_INVOKABLE void sync();
     Q_INVOKABLE void selectCalendar(const QString &id, bool selected);
+    Q_INVOKABLE bool removeUnavailableCalendar(const QString &id);
     Q_INVOKABLE void setDefaultCalendar(const QString &id);
     Q_INVOKABLE void disconnectAccount();
     Q_INVOKABLE void resolveConflict(const QString &id, const QString &resolution);
@@ -69,6 +70,7 @@ private:
     void completeSync();
     void fail(const QString &error, int retryAfter = 0);
     bool sql(const QString &statement, const QVariantList &values = {}) const;
+    bool eraseCalendarCache(const QString &id);
     void loadAccount();
     void queueSync();
     static bool allowed(const QUrl &url);
