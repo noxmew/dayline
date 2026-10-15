@@ -132,6 +132,8 @@ jobs:
           cat > "$RUNNER_TEMP/dayline-release-notes.md" <<EOF
           日笺 Dayline ${RELEASE_VERSION} · Linux 桌面日历预览版
 
+          提供本机日程、桌面月历与 iCloud CalDAV 账户接入和同步界面。
+
           安装包基于 Ubuntu 24.04，分别在 amd64 和 ARM64 原生运行器构建。Qt 等运行库由系统包管理器安装，未打入安装包。
 
           下载与你的系统架构对应的 .deb，在下载目录执行：
@@ -141,7 +143,9 @@ jobs:
           ARM64 将文件名末尾的 amd64 换为 arm64。安装后在应用菜单打开“日笺”，或执行 \`dayline\`；\`dayline --desktop\` 启动桌面模式。
 
           桌面模式依赖桌面环境。GNOME Wayland 需要用户启用安装包附带的 Dayline Desktop Bridge 扩展（GNOME Shell 46），其他会话须确认 X11/EWMH 支持。
-          统信 UOS/DDE 尚未完成实机验证；本次构建不声明 UOS 兼容。iCloud 同步需 Apple App 专用密码与可用的系统密钥环，尚待真实账户联调。
+          统信 UOS/DDE 尚未完成实机验证；本次构建不声明 UOS 兼容。
+          iCloud 同步需 Apple App 专用密码与可用的系统密钥环，尚未使用真实 Apple 账户验证跨设备往返。
+          重复日程、会议邀请及当前不支持的结构保留原文并按只读处理；暂未提供新建重复日程与本机提醒。
 
           下载 SHA256SUMS 后校验对应安装包：\`sha256sum -c --ignore-missing SHA256SUMS\`。
           源码和安装包版本一致，构建提交：${GITHUB_SHA}。
