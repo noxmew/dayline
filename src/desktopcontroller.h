@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QAbstractNativeEventFilter>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -8,7 +9,7 @@
 
 class QQuickWindow;
 
-class DesktopController final : public QObject
+class DesktopController final : public QObject, public QAbstractNativeEventFilter
 {
     Q_OBJECT
     Q_PROPERTY(bool supported READ supported NOTIFY supportedChanged)
@@ -22,13 +23,14 @@ class DesktopController final : public QObject
 
 public:
     explicit DesktopController(bool demo, bool requested, QObject *parent = nullptr);
+    ~DesktopController() override;
     void attach(QQuickWindow *manager, QQuickWindow *desktop);
     bool supported() const { return m_supported; }
     QString supportMessage() const { return m_supportMessage; }
     bool enabled() const { return m_enabled; }
     bool locked() const;
     qreal panelOpacity() const;
-    bool startOnDesktop() const { return m_requested && m_supported; }
+    bool startOnDesktop() const { return m_requested && m_supported && (!m_ddeSession || m_ddeDesktopWindow); }
     bool needsGnomeBridge() const { return m_needsGnomeBridge; }
     bool preparingDesktop() const { return m_showWhenSupported; }
     void setEnabled(bool enabled);
@@ -55,6 +57,9 @@ private:
     QRect constrainedGeometry(QRect rect) const;
     void saveGeometry();
     void applyDesktopHints();
+    void applyDdeDesktopParent();
+    void updateDdeDesktopWindow();
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
     void updateSupport();
     bool enableGnomeBridge();
     void cancelDesktopPreparation();
@@ -66,6 +71,10 @@ private:
     bool m_supported = false;
     bool m_protocolSupported = false;
     bool m_needsGnomeBridge = false;
+    bool m_ddeSession = false;
+    quint32 m_rootWindow = 0;
+    quint32 m_clientListAtom = 0;
+    quint32 m_ddeDesktopWindow = 0;
     bool m_requested;
     bool m_enabled = false;
     bool m_showWhenSupported = false;

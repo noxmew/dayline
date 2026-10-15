@@ -5,8 +5,10 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusServiceWatcher>
+#include <QList>
 #include <QQuickWindow>
 #include <QScreen>
+#include <QStringList>
 #include <QtGui/qguiapplication_platform.h>
 #include <xcb/xcb.h>
 #include <algorithm>
@@ -27,6 +29,39 @@ xcb_atom_t atom(xcb_connection_t *conn, const QByteArray &name)
     std::free(reply);
     return result;
 }
+
+QList<quint32> windowProperty(xcb_connection_t *conn, xcb_window_t window, xcb_atom_t property,
+                            xcb_atom_t type)
+{
+    auto *reply = xcb_get_property_reply(conn,
+        xcb_get_property(conn, false, window, property, type, 0, 4096), nullptr);
+    QList<quint32> result;
+    if (reply && reply->format == 32 && reply->type == type) {
+        const auto *values = static_cast<const quint32 *>(xcb_get_property_value(reply));
+        const auto count = xcb_get_property_value_length(reply) / int(sizeof(quint32));
+        result.reserve(count);
+        for (int i = 0; i < count; ++i) result.append(values[i]);
+    }
+    std::free(reply);
+    return result;
+}
+
+bool isDdeDesktop(xcb_connection_t *conn, xcb_window_t window)
+{
+    const auto types = windowProperty(conn, window, atom(conn, "_NET_WM_WINDOW_TYPE"), XCB_ATOM_ATOM);
+    if (!types.contains(atom(conn, "_NET_WM_WINDOW_TYPE_DESKTOP"))) return false;
+    auto *reply = xcb_get_property_reply(conn,
+        xcb_get_property(conn, false, window, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, 256), nullptr);
+    bool matches = false;
+    if (reply && reply->format == 8 && reply->type == XCB_ATOM_STRING) {
+        const QByteArray value(static_cast<const char *>(xcb_get_property_value(reply)),
+                               xcb_get_property_value_length(reply));
+        const auto names = value.split('\0');
+        matches = names.size() >= 2 && names[0] == "dde-shell/desktop" && names[1] == "org.deepin.dde-shell";
+    }
+    std::free(reply);
+    return matches;
+}
 }
 
 DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
@@ -38,14 +73,18 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
         m_supportMessage = "桌面模式需要 X11 或 XWayland；当前 Qt 使用原生 Wayland。";
         return;
     }
+    const bool wayland = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland" || !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
+    const auto desktops = qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(':', Qt::SkipEmptyParts);
+    m_ddeSession = !wayland && desktops.contains("DDE", Qt::CaseInsensitive);
     const auto root = xcb_setup_roots_iterator(xcb_get_setup(conn)).data->root;
+    m_rootWindow = root;
     auto *reply = xcb_get_property_reply(conn,
         xcb_get_property(conn, false, root, atom(conn, "_NET_SUPPORTED"), XCB_ATOM_ATOM, 0, 4096), nullptr);
     if (reply && reply->format == 32) {
         const auto *values = static_cast<xcb_atom_t *>(xcb_get_property_value(reply));
         const auto count = xcb_get_property_value_length(reply) / int(sizeof(xcb_atom_t));
         m_supported = true;
-        for (const auto &name : {"_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW",
+        for (const auto &name : {m_ddeSession ? "_NET_WM_WINDOW_TYPE_NORMAL" : "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW",
                                 "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER", "_NET_WM_DESKTOP"}) {
             if (std::find(values, values + count, atom(conn, name)) == values + count)
                 m_supported = false;
@@ -53,8 +92,20 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
     }
     std::free(reply);
     m_protocolSupported = m_supported;
-    const bool wayland = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland" || !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
     m_needsGnomeBridge = wayland && qEnvironmentVariable("XDG_CURRENT_DESKTOP").contains("GNOME", Qt::CaseInsensitive);
+    if (m_ddeSession && m_protocolSupported) {
+        m_clientListAtom = atom(conn, "_NET_CLIENT_LIST");
+        auto *attributes = xcb_get_window_attributes_reply(conn, xcb_get_window_attributes(conn, root), nullptr);
+        if (attributes) {
+            const uint32_t events = attributes->your_event_mask | XCB_EVENT_MASK_PROPERTY_CHANGE;
+            xcb_change_window_attributes(conn, root, XCB_CW_EVENT_MASK, &events);
+            qGuiApp->installNativeEventFilter(this);
+            updateDdeDesktopWindow();
+        } else {
+            m_protocolSupported = false;
+        }
+        std::free(attributes);
+    }
     if (m_needsGnomeBridge) {
         auto *watcher = new QDBusServiceWatcher("org.dayline.DesktopBridge", QDBusConnection::sessionBus(),
             QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
@@ -71,6 +122,11 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
         cancelDesktopPreparation();
         emit desktopActivationFailed();
     });
+}
+
+DesktopController::~DesktopController()
+{
+    if (m_ddeSession) qGuiApp->removeNativeEventFilter(this);
 }
 
 void DesktopController::attach(QQuickWindow *manager, QQuickWindow *desktop)
@@ -119,6 +175,9 @@ void DesktopController::updateSupport()
         m_supported = version.isValid() && version.value() == 1;
         m_supportMessage = m_supported ? "GNOME 桌面桥已连接，月历可在桌面图标层上接收操作。"
             : "GNOME Wayland 需要 Dayline Desktop Bridge 扩展。首次安装扩展后，请重新登录桌面；未加载扩展时无法操作桌面月历。";
+    } else if (m_ddeSession) {
+        m_supportMessage = m_ddeDesktopWindow ? "已连接 DDE 桌面，月历保持在普通窗口下方。"
+            : "DDE 桌面窗口尚未就绪，请稍后再试。";
     } else {
         m_supportMessage = "使用 X11 桌面窗口协议；UOS DDE 的层级和交互需在实机确认。";
     }
@@ -155,7 +214,7 @@ void DesktopController::applyDesktopHints()
 {
     auto *conn = connection();
     const auto id = m_desktop->winId();
-    const xcb_atom_t type = atom(conn, "_NET_WM_WINDOW_TYPE_DESKTOP");
+    const xcb_atom_t type = atom(conn, m_ddeSession ? "_NET_WM_WINDOW_TYPE_NORMAL" : "_NET_WM_WINDOW_TYPE_DESKTOP");
     const QByteArray role("dayline-desktop");
     xcb_change_property(conn, XCB_PROP_MODE_REPLACE, id, atom(conn, "WM_WINDOW_ROLE"), XCB_ATOM_STRING, 8, role.size(), role.constData());
     xcb_change_property(conn, XCB_PROP_MODE_REPLACE, id, atom(conn, "_NET_WM_WINDOW_TYPE"), XCB_ATOM_ATOM, 32, 1, &type);
@@ -165,6 +224,51 @@ void DesktopController::applyDesktopHints()
     const uint32_t allDesktops = std::numeric_limits<uint32_t>::max();
     xcb_change_property(conn, XCB_PROP_MODE_REPLACE, id, atom(conn, "_NET_WM_DESKTOP"), XCB_ATOM_CARDINAL, 32, 1, &allDesktops);
     xcb_flush(conn);
+}
+
+void DesktopController::applyDdeDesktopParent()
+{
+    if (!m_ddeSession || !m_desktop) return;
+    auto *conn = connection();
+    const auto id = m_desktop->winId();
+    if (m_ddeDesktopWindow) {
+        // KWin keeps desktop-group windows above the shell during Show Desktop.
+        xcb_change_property(conn, XCB_PROP_MODE_REPLACE, id, XCB_ATOM_WM_TRANSIENT_FOR,
+                            XCB_ATOM_WINDOW, 32, 1, &m_ddeDesktopWindow);
+    } else {
+        // Keep the calendar enabled while the shell restarts; bind its replacement on the next client-list event.
+        xcb_delete_property(conn, id, XCB_ATOM_WM_TRANSIENT_FOR);
+    }
+    xcb_flush(conn);
+}
+
+void DesktopController::updateDdeDesktopWindow()
+{
+    auto *conn = connection();
+    const auto clients = windowProperty(conn, m_rootWindow, m_clientListAtom, XCB_ATOM_WINDOW);
+    if (m_ddeDesktopWindow && clients.contains(m_ddeDesktopWindow)) return;
+    quint32 desktop = 0;
+    for (const auto client : clients) {
+        if (isDdeDesktop(conn, client)) {
+            desktop = client;
+            break;
+        }
+    }
+    if (desktop == m_ddeDesktopWindow) return;
+    m_ddeDesktopWindow = desktop;
+    applyDdeDesktopParent();
+    updateSupport();
+}
+
+bool DesktopController::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *)
+{
+    if (eventType != "xcb_generic_event_t") return false;
+    const auto *event = static_cast<xcb_generic_event_t *>(message);
+    if ((event->response_type & 0x7f) != XCB_PROPERTY_NOTIFY) return false;
+    const auto *property = reinterpret_cast<const xcb_property_notify_event_t *>(event);
+    if (property->window == m_rootWindow && property->atom == m_clientListAtom)
+        updateDdeDesktopWindow();
+    return false;
 }
 
 bool DesktopController::locked() const { return m_settings.value("desktop/locked", true).toBool(); }
@@ -185,13 +289,15 @@ void DesktopController::setPanelOpacity(qreal opacity)
 
 void DesktopController::setEnabled(bool enabled)
 {
-    if ((enabled && !m_supported) || !m_desktop || m_enabled == enabled) return;
+    if ((enabled && (!m_supported || (m_ddeSession && !m_ddeDesktopWindow))) || !m_desktop || m_enabled == enabled) return;
     m_enabled = enabled;
     m_settings.setValue("desktop/enabled", enabled);
     if (enabled) {
         constrainGeometry();
         applyDesktopHints();
         m_desktop->show();
+        // Qt clears WM_TRANSIENT_FOR when showing a Qt.Window; restore the DDE association afterwards.
+        applyDdeDesktopParent();
     } else {
         saveGeometry();
         openManager();
@@ -210,6 +316,13 @@ void DesktopController::openManager()
 
 bool DesktopController::showDesktop()
 {
+    if (m_ddeSession) {
+        updateDdeDesktopWindow();
+        if (!m_ddeDesktopWindow) {
+            updateSupport();
+            return false;
+        }
+    }
     if (!m_supported) {
         if (!m_protocolSupported || !m_needsGnomeBridge) return false;
         if (m_showWhenSupported) return true;
