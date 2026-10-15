@@ -2,6 +2,7 @@ execute_process(
     COMMAND "@DAYLINE_PYTHON_EXECUTABLE@" "@CMAKE_CURRENT_SOURCE_DIR@/scripts/bundle-runtime.py"
         --sdk "@DAYLINE_RUNTIME_PREFIX@"
         --root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}"
+        --openssl-major "@DAYLINE_RUNTIME_OPENSSL_MAJOR@"
     RESULT_VARIABLE runtime_result
 )
 if(NOT runtime_result EQUAL 0)

@@ -1,0 +1,36 @@
+FROM --platform=linux/amd64 rockylinux:8@sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c AS builddeps
+
+RUN --mount=type=tmpfs,target=/var/cache/dnf \
+    dnf -y upgrade ca-certificates \
+    && update-ca-trust \
+    && dnf -y --setopt=install_weak_deps=False --enablerepo=powertools install \
+        gcc-toolset-12-gcc-c++ cmake ninja-build make perl python3 pkgconf-pkg-config \
+        curl tar xz bzip2 gzip file binutils findutils which libarchive \
+        openssl-devel libical-devel \
+        libxcb-devel xcb-util-image-devel xcb-util-keysyms-devel \
+        xcb-util-renderutil-devel xcb-util-wm-devel libxkbcommon-x11-devel \
+        mesa-libGL-devel mesa-libEGL-devel libglvnd-devel fontconfig-devel freetype-devel \
+        dbus-devel zlib-devel libX11-devel libX11-xcb libXext-devel \
+        libXrender-devel libXi-devel libSM-devel libICE-devel libxkbcommon-devel \
+        libXfixes-devel libXrandr-devel libXcursor-devel libXinerama-devel \
+        expat-devel \
+    && dnf clean all
+
+FROM builddeps AS runtime-sdk
+
+ARG DAYLINE_SDK_RECIPE
+LABEL org.opencontainers.image.source="https://github.com/noxmew/dayline" \
+      io.dayline.sdk.recipe="${DAYLINE_SDK_RECIPE}"
+
+ENV SDK_PREFIX=/sdk/prefix \
+    SDK_WORKDIR=/tmp/dayline-runtime-build \
+    SDK_JOBS=1
+
+# Build with scripts/ as the context. The AMD recipe intentionally uses the
+# official RHEL 8 Qt SDK instead of rebuilding Qt or importing an ARM recipe.
+COPY build-runtime-sdk-amd64.sh /usr/local/libexec/dayline/build-runtime-sdk.sh
+
+RUN --mount=type=tmpfs,target=/tmp \
+    test -n "$DAYLINE_SDK_RECIPE" \
+    && touch /.dockerenv \
+    && bash /usr/local/libexec/dayline/build-runtime-sdk.sh

@@ -52,6 +52,7 @@ SYSTEM_LIBRARIES = {
     "libxkbcommon.so.0": "libxkbcommon0",
     "libxkbcommon-x11.so.0": "libxkbcommon-x11-0",
     "libdbus-1.so.3": "libdbus-1-3",
+    "libgssapi_krb5.so.2": "libgssapi-krb5-2",
     "libfontconfig.so.1": "libfontconfig1",
     "libfreetype.so.6": "libfreetype6",
     "libEGL.so.1": "libegl1",
@@ -127,6 +128,8 @@ def main():
     parser.add_argument("--sdk", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True,
                         help="Staged /usr prefix, including DESTDIR")
+    parser.add_argument("--openssl-major", choices=("1.1", "3"), required=True,
+                        help="OpenSSL ABI selected by CMake's FindOpenSSL")
     args = parser.parse_args()
     sdk = args.sdk.resolve(strict=True)
     root = args.root.resolve(strict=True)
@@ -185,7 +188,9 @@ def main():
         copy_runtime_files(sdk / "plugins" / category, plugins / category)
     if not is_elf(plugins / "xcbglintegrations/libqxcb-egl-integration.so"):
         fail("The private XCB runtime requires the EGL integration plugin")
-    for category in ("ossl-modules", "engines-3"):
+    openssl_directories = (("ossl-modules", "engines-3") if args.openssl_major == "3"
+                           else ("engines-1.1",))
+    for category in openssl_directories:
         copy_runtime_files(sdk / "lib" / category, libraries / category)
 
     # SDK library SONAMEs are flattened into the private lib directory. Every
@@ -207,7 +212,10 @@ def main():
                 fail("Multiple SDK providers for " + soname)
             providers[soname] = resolved
 
-    required_private = ("libstdc++.so.6", "libgcc_s.so.1", "libssl.so.3", "libcrypto.so.3", "libical.so.3")
+    # The official amd64 Qt TLS backend loads OpenSSL 1.1 at runtime rather
+    # than declaring it in DT_NEEDED. Always bundle the selected SSL/crypto pair.
+    required_private = ("libstdc++.so.6", "libgcc_s.so.1", "libical.so.3",
+                        "libssl.so." + args.openssl_major, "libcrypto.so." + args.openssl_major)
     for soname in required_private:
         if soname not in providers:
             fail("Missing required private runtime library: " + soname)

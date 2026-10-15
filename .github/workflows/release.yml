@@ -26,15 +26,21 @@ jobs:
         include:
           - arch: amd64
             runner: ubuntu-24.04
+            sdk_script: scripts/build-runtime-sdk-amd64.sh
+            sdk_dockerfile: platform/linux/Dockerfile.runtime-sdk-amd64
           - arch: arm64
             runner: ubuntu-24.04-arm
+            sdk_script: scripts/build-runtime-sdk.sh
+            sdk_dockerfile: platform/linux/Dockerfile.runtime-sdk
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     permissions:
       contents: read
-      packages: write
+      packages: read
     env:
       SDK_IMAGE_NAME: ghcr.io/noxmew/dayline-build
+      SDK_SCRIPT: ${{ matrix.sdk_script }}
+      SDK_DOCKERFILE: ${{ matrix.sdk_dockerfile }}
       DAYLINE_BUILD_CONTAINER: dayline-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
     steps:
       - name: Check out the pushed source commit
@@ -48,14 +54,13 @@ jobs:
           PACKAGE_ARCH: ${{ matrix.arch }}
         run: |
           [[ "$(dpkg --print-architecture)" == "$PACKAGE_ARCH" ]]
-          printf 'SDK_CACHE_ROOT=%s/dayline-sdk\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
           python3 - <<'PY'
           import hashlib
           import os
           from pathlib import Path
 
           digest = hashlib.sha256()
-          for name in ("scripts/build-runtime-sdk.sh", "platform/linux/Dockerfile.runtime-sdk"):
+          for name in (os.environ["SDK_SCRIPT"], os.environ["SDK_DOCKERFILE"]):
               content = Path(name).read_bytes()
               digest.update(len(content).to_bytes(8, "big"))
               digest.update(content)
@@ -78,9 +83,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SDK_IMAGE_TAG: ${{ steps.sdk-recipe.outputs.tag }}
         run: |
-          # Packages REST also handles the first publication, when GHCR may
-          # deny a registry token for a package that does not exist yet.
-          cat > "$RUNNER_TEMP/dayline-probe-sdk-image.py" <<'PY'
+          # SDK images are prepared locally. A missing recipe must fail here;
+          # release jobs never install or compile a complete SDK.
+          python3 - <<'PY'
           import json
           import os
           import re
@@ -143,101 +148,23 @@ jobs:
               first_page = False
           if len(matches) > 1:
               raise SystemExit("SDK recipe tag points to multiple image digests")
+          if not matches:
+              raise SystemExit(
+                  f"SDK image {image}:{os.environ['SDK_IMAGE_TAG']} is missing. "
+                  "Build and upload this recipe locally before publishing a release.")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              print("exists=" + ("true" if matches else "false"), file=output)
-              if matches:
-                  print("digest=" + next(iter(matches)), file=output)
-          print("Found the SDK recipe image" if matches else "SDK recipe image is absent")
+              print("digest=" + next(iter(matches)), file=output)
+          print("Found the locally prepared SDK recipe image")
           PY
-          python3 "$RUNNER_TEMP/dayline-probe-sdk-image.py"
-
-      - name: Restore the existing SDK cache as a cold-build seed
-        if: steps.existing-sdk-image.outputs.exists == 'false'
-        id: sdk-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.SDK_CACHE_ROOT }}/prefix
-          key: runtime-sdk-rocky8-9794037624aaa621-${{ matrix.arch }}-${{ hashFiles('scripts/build-runtime-sdk.sh') }}
-
-      - name: Prepare the optional SDK seed context
-        if: steps.existing-sdk-image.outputs.exists == 'false'
-        run: |
-          mkdir -p "$SDK_CACHE_ROOT/prefix"
-
-      - name: Set up the native SDK image builder
-        if: steps.existing-sdk-image.outputs.exists == 'false'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache only the system toolchain image layers
-        if: steps.existing-sdk-image.outputs.exists == 'false'
-        uses: docker/build-push-action@v6
-        with:
-          context: scripts
-          file: platform/linux/Dockerfile.runtime-sdk
-          target: builddeps
-          platforms: linux/${{ matrix.arch }}
-          outputs: type=cacheonly
-          cache-from: type=gha,scope=dayline-builddeps-${{ matrix.arch }}
-          cache-to: type=gha,scope=dayline-builddeps-${{ matrix.arch }},mode=max
-
-      - name: Build the complete SDK image without application secrets
-        if: steps.existing-sdk-image.outputs.exists == 'false'
-        uses: docker/build-push-action@v6
-        with:
-          context: scripts
-          file: platform/linux/Dockerfile.runtime-sdk
-          target: runtime-sdk
-          platforms: linux/${{ matrix.arch }}
-          build-contexts: |
-            sdkseed=${{ env.SDK_CACHE_ROOT }}/prefix
-          build-args: |
-            DAYLINE_SDK_RECIPE=${{ steps.sdk-recipe.outputs.recipe }}
-          tags: ${{ env.SDK_IMAGE_NAME }}:${{ steps.sdk-recipe.outputs.tag }}
-          load: true
-          push: false
-          provenance: false
-          sbom: false
-          cache-from: type=gha,scope=dayline-builddeps-${{ matrix.arch }}
-
-      - name: Recheck the recipe tag before publishing a cold build
-        if: steps.existing-sdk-image.outputs.exists == 'false'
-        id: rechecked-sdk-image
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SDK_IMAGE_TAG: ${{ steps.sdk-recipe.outputs.tag }}
-        run: python3 "$RUNNER_TEMP/dayline-probe-sdk-image.py"
-
-      - name: Publish a missing recipe and record the pushed manifest digest
-        if: steps.existing-sdk-image.outputs.exists == 'false' && steps.rechecked-sdk-image.outputs.exists == 'false'
-        id: published-sdk-image
-        env:
-          SDK_IMAGE_TAG: ${{ steps.sdk-recipe.outputs.tag }}
-        run: |
-          docker push "$SDK_IMAGE_NAME:$SDK_IMAGE_TAG"
-          digest="$(docker image inspect "$SDK_IMAGE_NAME:$SDK_IMAGE_TAG" | \
-            jq -er --arg prefix "${SDK_IMAGE_NAME}@" \
-            '.[0].RepoDigests | map(select(startswith($prefix))) |
-             if length == 1 then .[0] | split("@")[1] else error("Ambiguous pushed SDK digest") end')"
-          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
 
       - name: Pull and verify the exact SDK image
         env:
-          EXISTING_DIGEST: ${{ steps.existing-sdk-image.outputs.digest }}
-          RECHECKED_DIGEST: ${{ steps.rechecked-sdk-image.outputs.digest }}
-          PUBLISHED_DIGEST: ${{ steps.published-sdk-image.outputs.digest }}
+          SDK_DIGEST: ${{ steps.existing-sdk-image.outputs.digest }}
           SDK_RECIPE: ${{ steps.sdk-recipe.outputs.recipe }}
           PACKAGE_ARCH: ${{ matrix.arch }}
         run: |
-          if [[ '${{ steps.existing-sdk-image.outputs.exists }}' == true ]]; then
-            digest="$EXISTING_DIGEST"
-          elif [[ '${{ steps.rechecked-sdk-image.outputs.exists }}' == true ]]; then
-            digest="$RECHECKED_DIGEST"
-          else
-            digest="$PUBLISHED_DIGEST"
-          fi
-          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-          export DAYLINE_SDK_IMAGE="$SDK_IMAGE_NAME@$digest"
+          [[ "$SDK_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          export DAYLINE_SDK_IMAGE="$SDK_IMAGE_NAME@$SDK_DIGEST"
           docker pull "$DAYLINE_SDK_IMAGE"
           python3 - <<'PY'
           import json
@@ -261,7 +188,7 @@ jobs:
           docker run --detach --name "$DAYLINE_BUILD_CONTAINER" \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/source" \
             "$DAYLINE_SDK_IMAGE" sleep infinity
-          script_sha="$(sha256sum scripts/build-runtime-sdk.sh | cut -d ' ' -f 1)"
+          script_sha="$(sha256sum "$SDK_SCRIPT" | cut -d ' ' -f 1)"
           docker exec --interactive --env DAYLINE_EXPECTED_SCRIPT_SHA256="$script_sha" \
             "$DAYLINE_BUILD_CONTAINER" bash -Eeuo pipefail <<'SH'
           source /etc/os-release
@@ -398,13 +325,23 @@ jobs:
                   if name in providers:
                       raise SystemExit(f"Duplicate private SONAME: {name}")
                   providers[name] = path
-              records[path] = (definitions, requirements)
-          for name in ("libQt6Core.so.6", "libstdc++.so.6", "libgcc_s.so.1", "libssl.so.3", "libcrypto.so.3", "libical.so.3"):
+              records[path] = (definitions, requirements, needed)
+          for name in ("libQt6Core.so.6", "libstdc++.so.6", "libgcc_s.so.1", "libical.so.3"):
               if name not in providers:
                   raise SystemExit(f"Missing bundled runtime: {name}")
+          main = runtime / "dayline"
+          if main not in records:
+              raise SystemExit("Missing Dayline ELF executable")
+          crypto = [name for name in records[main][2] if name.startswith("libcrypto.so.")]
+          if len(crypto) != 1 or crypto[0] not in ("libcrypto.so.3", "libcrypto.so.1.1"):
+              raise SystemExit(f"Dayline must link exactly one supported private OpenSSL ABI: {crypto}")
+          ssl = "libssl.so." + crypto[0].split("libcrypto.so.", 1)[1]
+          for name in (crypto[0], ssl):
+              if name not in providers:
+                  raise SystemExit(f"Missing matching private OpenSSL provider: {name}")
           if "Qt_6.4" not in records[providers["libQt6Core.so.6"]][0]:
               raise SystemExit("Bundled Qt does not provide the Qt 6.4 ABI")
-          for path, (_, requirements) in records.items():
+          for path, (_, requirements, _) in records.items():
               for name, required in requirements.items():
                   if name in providers:
                       missing = required - records[providers[name]][0]
