@@ -56,7 +56,7 @@ ApplicationWindow {
             InlineNotice {
                 Layout.fillWidth: true
                 iconName: "cloud"
-                text: "使用 Apple 账户和 App 专用密码直连 iCloud。专用密码仅保存在系统密钥环，日笺不设中转服务器。"
+                text: "使用 Apple 账户和 App 专用密码直连 iCloud。专用密码在本机加密保存，日笺不设中转服务器。"
             }
             Text {
                 Layout.fillWidth: true

@@ -5,6 +5,7 @@
 #include <QCryptographicHash>
 #include <QDBusConnection>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
@@ -107,6 +108,7 @@ void ICloudSync::networkStateChanged(uint state) { if (state >= 60) sync(); }
 
 bool ICloudSync::initialize(const QString &databasePath)
 {
+    m_secrets.setDirectory(QFileInfo(databasePath).absolutePath() + "/credentials");
     m_db = QSqlDatabase::addDatabase("QSQLITE", "dayline-icloud");
     m_db.setDatabaseName(databasePath);
     if (!m_db.open()) { m_error = "无法打开 iCloud 本机缓存。"; return false; }
@@ -315,7 +317,7 @@ void ICloudSync::sync()
     if (m_authRequired) { m_error = "iCloud 授权已暂停，请重新生成 App 专用密码并重新授权。"; emit changed(); return; }
     if (m_retry.isActive()) { m_status = QString("网络重试等待中，约 %1 秒后自动同步").arg((m_retry.remainingTime() + 999) / 1000); emit changed(); return; }
     if (m_password.isEmpty()) {
-        setBusy("正在读取系统密钥环…");
+        setBusy("正在读取本机加密凭据…");
         m_secrets.read(m_user, [this](const QByteArray &password, const QString &error) {
             m_busy = false;
             if (!error.isEmpty()) { fail(error); return; }

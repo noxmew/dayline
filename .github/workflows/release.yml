@@ -40,7 +40,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
-            build-essential cmake ninja-build pkg-config libxcb1-dev libical-dev \
+            build-essential cmake ninja-build pkg-config libxcb1-dev libical-dev libssl-dev \
             qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools \
             qt6-qpa-plugins libqt6sql6-sqlite \
             qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
@@ -151,7 +151,7 @@ jobs:
 
           桌面模式依赖桌面环境。GNOME Wayland 需要用户启用安装包附带的 Dayline Desktop Bridge 扩展（GNOME Shell 46），其他会话须确认 X11/EWMH 支持。
           统信 UOS/DDE 尚未完成实机验证；本次构建不声明 UOS 兼容。
-          iCloud 同步需 Apple App 专用密码与可用的系统密钥环，尚未使用真实 Apple 账户验证跨设备往返。
+          iCloud 同步需 Apple App 专用密码，凭据在本机加密保存；尚未使用真实 Apple 账户验证跨设备往返。
           重复日程、会议邀请及当前不支持的结构保留原文并按只读处理；暂未提供新建重复日程与本机提醒。
 
           下载 SHA256SUMS 后校验对应安装包：\`sha256sum -c --ignore-missing SHA256SUMS\`。
