@@ -84,7 +84,7 @@ QString cleanColor(QString value) { if (value.size() == 9) value.truncate(7); re
 QString normalized(const QUrl &url) { return url.adjusted(QUrl::NormalizePathSegments | QUrl::RemoveFragment).toString(QUrl::FullyEncoded); }
 QString details(const QByteArray &raw)
 {
-    if (!ICalResource::canEdit(raw)) return "含只读结构或无法完整解析，原始内容已保留。";
+    if (!ICalResource::canEdit(raw)) return "此日程含暂不支持的内容或无法完整读取，无法在日笺中编辑。";
     const auto items = ICalResource::occurrences(raw, QDate(1,1,1), QDate(9999,12,31));
     if (items.isEmpty()) return {};
     const auto e = items.first().toMap();
@@ -251,7 +251,7 @@ void ICloudSync::connectAccount(const QString &account, const QString &password,
     }
     if (m_connected && (user.compare(m_user, Qt::CaseInsensitive) || region != m_region)) { fail("请先处理待同步内容并断开当前账户，再连接其他账户或地区。"); return; }
     m_user = user; m_password = password.trimmed().toUtf8(); m_region = region; m_authRequired = false;
-    m_home.clear(); m_retry.stop(); setBusy("正在发现 iCloud 日历…");
+    m_home.clear(); m_retry.stop(); setBusy("正在查找 iCloud 日历…");
     discover([this](bool success) {
         if (!success) {
             const QString error = m_error, status = m_status;
@@ -315,9 +315,9 @@ void ICloudSync::sync()
 {
     if (!m_connected || m_busy) return;
     if (m_authRequired) { m_error = "iCloud 授权已暂停，请重新生成 App 专用密码并重新授权。"; emit changed(); return; }
-    if (m_retry.isActive()) { m_status = QString("网络重试等待中，约 %1 秒后自动同步").arg((m_retry.remainingTime() + 999) / 1000); emit changed(); return; }
+    if (m_retry.isActive()) { m_status = QString("约 %1 秒后重试同步").arg((m_retry.remainingTime() + 999) / 1000); emit changed(); return; }
     if (m_password.isEmpty()) {
-        setBusy("正在读取本机加密凭据…");
+        setBusy("正在连接 iCloud…");
         m_secrets.read(m_user, [this](const QByteArray &password, const QString &error) {
             m_busy = false;
             if (!error.isEmpty()) { fail(error); return; }
@@ -347,7 +347,7 @@ void ICloudSync::synchronizeCalendars(const QStringList &ids, int index)
         bool complete = false;
         for (const auto &row : rows)
             complete |= row.collection && normalized(r.url.resolved(QUrl(row.href))) == normalized(r.url);
-        if (!complete) { fail("iCloud 资源清单缺少日历集合本身，已停止同步并保留原缓存。"); return; }
+        if (!complete) { fail("iCloud 返回的日历信息不完整，同步已暂停，本机内容已保留。"); return; }
         QSet<QString> seen; QList<QPair<QString, QString>> changed;
         for (const auto &row : rows) {
             if (row.collection) continue;
@@ -409,7 +409,7 @@ void ICloudSync::uploadNext()
     const QString href = q.value(0).toString(), operation = q.value(3).toString();
     if (q.value(4).toBool()) { confirmWrite(href, operation); return; }
     const QByteArray raw = q.value(1).toByteArray(), etag = q.value(2).toByteArray();
-    if (operation != "create" && etag.isEmpty()) { fail("日程缺少云端版本，已停止写入以保护云端内容。"); return; }
+    if (operation != "create" && etag.isEmpty()) { fail("日程缺少云端版本信息，暂不能上传。"); return; }
     QMap<QByteArray, QByteArray> headers;
     headers.insert(operation == "create" ? "If-None-Match" : "If-Match", operation == "create" ? QByteArray("*") : etag);
     // Persist uncertainty before dispatch so a crash or timeout is reconciled before any retry.
@@ -509,7 +509,7 @@ bool ICloudSync::saveEvent(const QVariantMap &fields, QString *error)
     if (!m_db.transaction()) { *error = "无法开始保存。"; return false; }
     bool ok = id.isEmpty() ? sql("INSERT INTO icloud_resources(href,id,calendar,uid,raw,pending) VALUES(?,?,?,?,?,?)", {href,eventId(href),calendar,storedUid,raw,pending}) :
         sql("UPDATE icloud_resources SET uid=?,raw=?,pending=?,error='' WHERE id=?", {storedUid,raw,pending,id});
-    if (!ok || !m_db.commit()) { m_db.rollback(); *error = "无法保存日程及待同步状态。"; return false; }
+    if (!ok || !m_db.commit()) { m_db.rollback(); *error = "无法保存日程和同步状态。"; return false; }
     emit dataChanged(); emit changed(); queueSync(); return true;
 }
 bool ICloudSync::deleteEvent(const QString &id, QString *error)
@@ -533,7 +533,7 @@ void ICloudSync::resolveConflict(const QString &id, const QString &resolution)
             sql("UPDATE icloud_resources SET uid=?,raw=remote_raw,baseline=remote_raw,etag=remote_etag,pending='',conflict=0,remote_raw=X'',remote_etag='',error='' WHERE id=?", {ICalResource::uid(q.value(3).toByteArray()),id});
     } else if (resolution == "local" && !deleted) {
         if (!ICalResource::canEdit(q.value(3).toByteArray())) {
-            fail("云端日程现在含只读结构，不能直接覆盖。请采用云端，或将本机内容另存为新日程。" ); return;
+            fail("云端日程含暂不支持的内容，无法覆盖。请选择“采用云端”或“另存为新日程”。" ); return;
         }
         // The next write still uses If-Match against the version displayed in the conflict panel.
         ok = sql("UPDATE icloud_resources SET baseline=remote_raw,etag=remote_etag,pending=CASE WHEN pending='delete' THEN 'delete' ELSE 'update' END,conflict=0,remote_raw=X'',remote_etag='',error='' WHERE id=?", {id});

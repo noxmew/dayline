@@ -83,7 +83,7 @@ ApplicationWindow {
         readOnlyEvent = !!event.readOnly
         readOnlyReason = event.readOnlyReason || ""
         cloudEvent = !!event.cloud
-        syncState = event.syncState || "保存到本机"
+        syncState = event.syncState || "本机日程"
         titleField.text = event.title
         dateField.text = event.date
         endDateField.text = event.endDate || event.date
@@ -131,14 +131,9 @@ ApplicationWindow {
             Layout.fillWidth: true
             spacing: 12
             Rectangle { width: 42; height: 42; radius: 12; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: editor.readOnlyEvent ? "lock" : "note"; width: 22; height: 22; color: Theme.accent } }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 5
-                Text { text: editor.readOnlyEvent ? "日程详情" : editor.eventId.length ? "编辑日程" : "记下下一件小事"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
-                Text { text: "给重要的事，留一个位置"; color: Theme.muted; font.pixelSize: 11 }
-            }
+            Text { Layout.fillWidth: true; text: editor.readOnlyEvent ? "日程详情" : editor.eventId.length ? "编辑日程" : "新建日程"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
         }
-        Field { id: titleField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; placeholderText: "这一天，有什么安排？"; font.pixelSize: 15; implicitHeight: 48; maximumLength: editor.originalCloudEvent && editor.eventId.length > 0 ? 2147483647 : 200 }
+        Field { id: titleField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; placeholderText: "日程标题"; font.pixelSize: 15; implicitHeight: 48; maximumLength: editor.originalCloudEvent && editor.eventId.length > 0 ? 2147483647 : 200 }
         RowLayout {
             Layout.fillWidth: true; spacing: 14
             ColumnLayout {
@@ -220,7 +215,7 @@ ApplicationWindow {
                     id: notesField
                     width: notesScroll.availableWidth
                     readOnly: editor.readOnlyEvent
-                    placeholderText: "一些细节，或者一个突然冒出的想法…"
+                    placeholderText: "添加备注"
                     wrapMode: TextEdit.Wrap
                     padding: 12
                     font.pixelSize: 12
@@ -235,9 +230,10 @@ ApplicationWindow {
         }
         InlineNotice { visible: calendarStore.error.length > 0; text: calendarStore.error; error: true; Layout.fillWidth: true }
         RowLayout {
+            visible: editor.cloudEvent
             Layout.fillWidth: true
-            Icon { name: editor.cloudEvent ? "cloud" : "note"; width: 14; height: 14; color: Theme.muted }
-            Text { Layout.fillWidth: true; text: editor.cloudEvent ? "先保存到本机，再同步 iCloud · " + editor.syncState : "保存到本机"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
+            Icon { name: "cloud"; width: 14; height: 14; color: Theme.muted }
+            Text { Layout.fillWidth: true; text: "iCloud · " + editor.syncState; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
         }
         InlineNotice { Layout.fillWidth: true; visible: editor.readOnlyEvent; text: editor.readOnlyReason; iconName: "lock" }
         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
@@ -261,8 +257,8 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             spacing: 18
             Rectangle { width: 40; height: 40; radius: 12; color: Theme.dangerSoft; Icon { anchors.centerIn: parent; name: "trash"; width: 21; height: 21; color: Theme.danger } }
-            Text { text: "删除这项日程？"; font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.text }
-            Text { text: editor.cloudEvent ? "删除操作会同步到 iCloud，并影响其他设备上的此日程。" : "日程会从本机移除，此操作无法撤销。"; font.pixelSize: 12; color: Theme.secondary; Layout.fillWidth: true; wrapMode: Text.Wrap; lineHeight: 1.5 }
+            Text { text: "删除日程？"; font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.text }
+            Text { text: editor.cloudEvent ? "这项日程也会从 iCloud 和其他设备中删除。" : "日程将从本机删除，无法撤销。"; font.pixelSize: 12; color: Theme.secondary; Layout.fillWidth: true; wrapMode: Text.Wrap; lineHeight: 1.5 }
             RowLayout {
                 Item { Layout.fillWidth: true }
                 ActionButton { text: "取消"; onClicked: deleteDialog.close() }

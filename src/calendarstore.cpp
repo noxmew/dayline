@@ -410,7 +410,7 @@ bool CalendarStore::saveEvent(const QVariantMap &event)
     const QString start = event.value("start").toString();
     const QString end = event.value("end").toString();
     const QString calendar = event.value("calendar").toString();
-    if (title.isEmpty()) { setError("给这件事起个名字吧。"); return false; }
+    if (title.isEmpty()) { setError("请输入日程标题。"); return false; }
     if (!date.isValid()) { setError("请输入有效日期，格式为 YYYY-MM-DD。"); return false; }
     if (!allDay && (!QTime::fromString(start, "HH:mm").isValid() ||
                     !QTime::fromString(end, "HH:mm").isValid() || start >= end)) {
@@ -460,22 +460,22 @@ void CalendarStore::seedPreview()
     QSqlQuery query(m_db);
     struct Sample { int day; const char *title; const char *start; const char *end; const char *calendar; const char *notes; };
     const Sample samples[] = {
-        {2,"留一天给自己","","","life","散散步，读几页喜欢的书。"},
-        {5,"十月计划","09:30","10:30","work","整理这个月想完成的三件事。"},
-        {7,"去看一场电影","19:00","21:00","life","在忙碌之外，也记得好好生活。"},
-        {9,"收集秋日灵感","","","ideas","光线、街角和一些偶然的发现。"},
-        {12,"产品方向讨论","10:00","11:00","work","让每一天的安排更清晰。"},
-        {14,"给植物浇水","","","life","窗台上的绿意也需要照顾。"},
-        {15,"日笺 · 设计碰头","10:00","11:00","work","聊聊月历的留白、配色与交互。"},
-        {15,"散步，顺便买束花","17:30","18:15","life","去常去的花店，挑一束秋天。"},
-        {15,"记下一个好点子","","","ideas","让日历像桌面上的一张小纸笺。"},
-        {16,"本周小结","16:00","16:30","work","回顾完成的事情，也留意新的想法。"},
-        {18,"和朋友吃早午餐","11:00","12:30","life","好好吃饭，慢慢聊天。"},
-        {20,"日历交互评审","14:00","15:00","work","把日常操作做得自然一点。"},
-        {22,"读完一本书","","","ideas","不赶进度，享受阅读。"},
-        {24,"去公园看秋天","09:00","11:00","life","带上相机，走一条没走过的路。"},
-        {27,"整理灵感清单","","","ideas","为下一个月留一点期待。"},
-        {28,"月末项目回顾","15:00","16:00","work","记录收获，准备下一步。"}
+        {2,"休息","","","life",""},
+        {5,"本月计划","09:30","10:30","work","整理本月任务和截止日期。"},
+        {7,"看电影","19:00","21:00","life","提前取票。"},
+        {9,"整理照片","","","ideas","选出要打印的照片。"},
+        {12,"产品讨论","10:00","11:00","work","确认下一版的功能范围。"},
+        {14,"给植物浇水","","","life",""},
+        {15,"设计讨论","10:00","11:00","work","确认月历布局和配色。"},
+        {15,"散步买花","17:30","18:15","life","回家前去一趟花店。"},
+        {15,"记录想法","","","ideas","整理桌面日历的使用建议。"},
+        {16,"本周小结","16:00","16:30","work","整理进度和下周任务。"},
+        {18,"和朋友吃饭","11:00","12:30","life","确认餐厅和人数。"},
+        {20,"交互评审","14:00","15:00","work","检查新建、编辑和搜索流程。"},
+        {22,"阅读","","","ideas","读完第三章。"},
+        {24,"去公园","09:00","11:00","life","带上相机。"},
+        {27,"整理笔记","","","ideas","按主题归类。"},
+        {28,"项目回顾","15:00","16:00","work","检查本月进度。"}
     };
     if (!m_db.transaction()) { setError(m_db.lastError().text()); return; }
     for (const auto &sample : samples) {

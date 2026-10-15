@@ -2,8 +2,8 @@
 Type=Application
 Name=Dayline
 Name[zh_CN]=日笺
-Comment=A calm desktop calendar
-Comment[zh_CN]=把日子，过得从容一点
+Comment=Desktop calendar
+Comment[zh_CN]=桌面日历
 Exec=dayline
 Icon=dayline
 Terminal=false
@@ -13,5 +13,5 @@ Actions=Preview;
 
 [Desktop Action Preview]
 Name=Open sample calendar
-Name[zh_CN]=体验示例日历
+Name[zh_CN]=打开示例日历
 Exec=dayline --demo

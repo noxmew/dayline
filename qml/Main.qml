@@ -10,7 +10,7 @@ ApplicationWindow {
     minimumWidth: 1220
     minimumHeight: 720
     visible: !desktopController.startOnDesktop
-    title: "日笺 · Dayline" + (calendarStore.demo ? " · 预览空间" : "")
+    title: "日笺 · Dayline" + (calendarStore.demo ? " · 示例日历" : "")
     color: Theme.background
     property string page: "calendar"
     readonly property bool showingList: page === "agenda" || calendarStore.searchQuery.length > 0
@@ -81,8 +81,8 @@ ApplicationWindow {
                         Text { text: "D A Y L I N E"; font.pixelSize: 8; color: Theme.secondary }
                     }
                 }
-                Text { Layout.topMargin: 34; Layout.leftMargin: 12; text: calendarStore.demo ? "预览空间" : "我的空间"; font.pixelSize: 10; color: Theme.muted }
-                SideNav { Layout.topMargin: 12; label: "我的日历"; glyph: "calendar"; selected: window.page === "calendar"; onClicked: { window.page = "calendar"; searchField.clear() } }
+                Text { visible: calendarStore.demo; Layout.topMargin: 30; Layout.leftMargin: 12; text: "示例日历"; font.pixelSize: 10; color: Theme.muted }
+                SideNav { Layout.topMargin: calendarStore.demo ? 12 : 32; label: "我的日历"; glyph: "calendar"; selected: window.page === "calendar"; onClicked: { window.page = "calendar"; searchField.clear() } }
                 SideNav { Layout.topMargin: 5; label: "日程列表"; glyph: "list"; selected: window.page === "agenda"; onClicked: window.page = "agenda" }
 
                 RowLayout {
@@ -199,7 +199,7 @@ ApplicationWindow {
                         Row {
                             spacing: 8
                             Icon { name: "cloud"; width: 18; height: 18; color: Theme.accent }
-                            Text { text: "与 iCloud 相连"; color: Theme.text; font.pixelSize: 12; font.weight: Font.Medium }
+                            Text { text: "iCloud"; color: Theme.text; font.pixelSize: 12; font.weight: Font.Medium }
                         }
                         Text { text: iCloudSync.status; color: Theme.muted; font.pixelSize: 10; width: parent.width; elide: Text.ElideRight }
                         AbstractButton {
@@ -237,8 +237,6 @@ ApplicationWindow {
                     Layout.preferredHeight: 40
                     spacing: 10
                     Text { text: "我的日历"; color: Theme.secondary; font.pixelSize: 12 }
-                    Rectangle { width: 1; height: 13; color: Theme.line }
-                    Text { text: "让每一天，有迹可循"; color: Theme.muted; font.pixelSize: 10 }
                     Item { Layout.fillWidth: true }
                     ActionButton {
                         text: desktopController.preparingDesktop ? "正在准备…" : "贴到桌面"
@@ -261,14 +259,9 @@ ApplicationWindow {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.topMargin: 37
-                    Layout.bottomMargin: 25
-                    ColumnLayout {
-                        spacing: 7
-                        Text { text: calendarStore.monthEnglish; color: Theme.accent; font.pixelSize: 9; font.weight: Font.Medium; font.letterSpacing: 1.6 }
-                        Text { text: calendarStore.searchQuery.length ? "搜索结果" : calendarStore.monthLabel; color: Theme.text; font.pixelSize: 32; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
-                        Text { text: "把日子，过得从容一点。"; color: Theme.secondary; font.pixelSize: 11 }
-                    }
+                    Layout.topMargin: 26
+                    Layout.bottomMargin: 22
+                    Text { text: calendarStore.searchQuery.length ? "搜索结果" : calendarStore.monthLabel; color: Theme.text; font.pixelSize: 32; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
                     Item { Layout.fillWidth: true }
                     ActionButton { text: "今天"; onClicked: calendarStore.goToday() }
                     RowLayout {
@@ -336,18 +329,15 @@ ApplicationWindow {
                         Column {
                             anchors.centerIn: parent; spacing: 12; visible: agendaList.count === 0
                             Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "search"; width: 28; height: 28; color: Theme.muted }
-                            Text { text: calendarStore.searchQuery.length ? "没有找到相关日程" : "这个月，还留着很多可能"; color: Theme.secondary; font.pixelSize: 13 }
+                            Text { text: calendarStore.searchQuery.length ? "未找到日程" : "本月没有日程"; color: Theme.secondary; font.pixelSize: 13 }
                         }
                     }
                 }
                 RowLayout {
-                    Layout.fillWidth: true; Layout.preferredHeight: 47
+                    Layout.fillWidth: true; Layout.preferredHeight: 39
                     spacing: 6
-                    Rectangle { width: 5; height: 5; radius: 3; color: Theme.accent }
-                    Text { text: "本机已保存"; font.pixelSize: 9; color: Theme.secondary }
-                    Text { text: "  ·  " + (calendarStore.demo ? "预览空间" : "仅此设备"); font.pixelSize: 9; color: Theme.muted }
+                    Text { text: "双击日期新建日程"; font.pixelSize: 9; color: Theme.muted }
                     Item { Layout.fillWidth: true }
-                    Text { text: "双击日期，记录下一件小事"; font.pixelSize: 9; color: Theme.muted }
                     Text { Layout.leftMargin: 13; text: "本月 " + calendarStore.monthCount + " 项"; font.pixelSize: 9; color: Theme.secondary }
                 }
             }
@@ -362,13 +352,7 @@ ApplicationWindow {
                 anchors.fill: parent; anchors.margins: 24
                 spacing: 0
                 RowLayout {
-                    Layout.topMargin: 12; Layout.fillWidth: true
-                    Text { text: "一 天 一 笺"; color: Theme.muted; font.pixelSize: 10 }
-                    Item { Layout.fillWidth: true }
-                    Icon { name: "sun"; width: 17; height: 17; color: Theme.muted }
-                }
-                RowLayout {
-                    Layout.topMargin: 18; Layout.fillWidth: true; spacing: 15
+                    Layout.topMargin: 12; Layout.fillWidth: true; spacing: 15
                     Text { text: calendarStore.selectedDay; font.pixelSize: 60; font.weight: Font.Light; font.letterSpacing: -3; color: Theme.text }
                     ColumnLayout {
                         spacing: 7
@@ -429,8 +413,8 @@ ApplicationWindow {
                             visible: calendarStore.selectedEvents.length === 0
                             width: parent.width; topPadding: 32; spacing: 14
                             Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "note"; width: 32; height: 32; color: Theme.muted }
-                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: "今天，留一点空白"; color: Theme.secondary; font.pixelSize: 12 }
-                            ActionButton { anchors.horizontalCenter: parent.horizontalCenter; text: "记下一件事"; iconName: "plus"; quiet: true; onClicked: window.openNewEvent() }
+                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: "当天没有日程"; color: Theme.secondary; font.pixelSize: 12 }
+                            ActionButton { anchors.horizontalCenter: parent.horizontalCenter; text: "新建日程"; iconName: "plus"; quiet: true; onClicked: window.openNewEvent() }
                         }
                     }
                 }
@@ -455,9 +439,7 @@ ApplicationWindow {
                         MouseArea { id: nextEventMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { calendarStore.selectDate(nextEvent.modelData.date); editor.edit(nextEvent.modelData) } }
                     }
                 }
-                Text { visible: calendarStore.upcomingEvents.length === 0; Layout.topMargin: 12; Layout.bottomMargin: 14; text: "还没有接下来的安排"; color: Theme.muted; font.pixelSize: 11 }
-                Rectangle { Layout.fillWidth: true; Layout.topMargin: 15; height: 1; color: Theme.line }
-                Text { Layout.topMargin: 18; text: "留点空白，给好事发生。"; font.pixelSize: 10; color: Theme.muted }
+                Text { visible: calendarStore.upcomingEvents.length === 0; Layout.topMargin: 12; Layout.bottomMargin: 14; text: "暂无后续日程"; color: Theme.muted; font.pixelSize: 11 }
             }
         }
     }
@@ -507,11 +489,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Rectangle { width: 42; height: 42; radius: 12; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: "calendar"; width: 23; height: 23; color: Theme.accent } }
-                ColumnLayout {
-                    spacing: 5
-                    Text { text: calendarDialog.calendarId.length ? "编辑分类" : "新增本机分类"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
-                    Text { text: "用名称和颜色整理你的日程"; color: Theme.muted; font.pixelSize: 11 }
-                }
+                Text { text: calendarDialog.calendarId.length ? "编辑分类" : "新增本机分类"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
                 Item { Layout.fillWidth: true }
                 ActionButton { iconName: "close"; hint: "关闭"; quiet: true; onClicked: calendarDialog.close() }
             }
@@ -544,7 +522,6 @@ ApplicationWindow {
                 }
             }
             InlineNotice { Layout.fillWidth: true; visible: calendarStore.error.length > 0; text: calendarStore.error; error: true }
-            Text { Layout.fillWidth: true; text: "此分类保存在当前设备。已有日程会同步使用新的名称和颜色。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
             RowLayout {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
@@ -585,8 +562,8 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: deleteCalendarDialog.eventCount > 0
-                    ? "这个分类中有 " + deleteCalendarDialog.eventCount + " 项日程。先选择另一个本机分类来保留它们，再删除分类。"
-                    : "这个分类中没有日程，可以直接删除。"
+                    ? "此分类有 " + deleteCalendarDialog.eventCount + " 项日程，请选择要移入的本机分类。"
+                    : "此分类没有日程。"
                 color: Theme.secondary; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.5
             }
             ColumnLayout {
@@ -653,31 +630,22 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 12
                 Rectangle { width: 42; height: 42; radius: 12; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: "settings"; width: 22; height: 22; color: Theme.accent } }
-                ColumnLayout {
-                    spacing: 5
-                    Text { text: "偏好设置"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
-                    Text { text: "让日笺更适合你的日常"; color: Theme.muted; font.pixelSize: 11 }
-                }
+                Text { text: "偏好设置"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
                 Item { Layout.fillWidth: true }
                 ActionButton { iconName: "close"; hint: "关闭"; quiet: true; onClicked: settingsDialog.close() }
             }
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 78
+                implicitHeight: 60
                 radius: 12; color: Theme.input; border.color: Theme.line
                 RowLayout {
                     anchors.fill: parent; anchors.margins: 16
-                    ColumnLayout {
-                        spacing: 7
-                        Text { text: "深色外观"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
-                        Text { text: "为夜晚的灵感，调暗一点光"; color: Theme.muted; font.pixelSize: 11 }
-                    }
+                    Text { text: "深色外观"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
                     Item { Layout.fillWidth: true }
                     Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked; Accessible.name: "深色外观" }
                 }
             }
             ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }
-            Text { Layout.fillWidth: true; text: "本机日历留在当前设备。选择 iCloud 日历记录的日程会先保存在本机，再同步到云端。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
             ActionButton { text: "检查更新"; iconName: "refresh"; onClicked: { settingsDialog.close(); window.openUpdates() } }
             RowLayout {

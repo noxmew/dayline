@@ -124,7 +124,7 @@ Result decrypt(const QByteArray &key, const QByteArray &identity, const QByteArr
         EVP_CIPHER_CTX_ctrl(context.get(), EVP_CTRL_GCM_SET_TAG, tag.size(), tag.data()) != 1 ||
         EVP_DecryptFinal_ex(context.get(), reinterpret_cast<unsigned char *>(plaintext.data()) + size, &finalSize) != 1) {
         plaintext.fill(char(0));
-        return {{}, "本机凭据校验失败，请重新连接 iCloud；未使用损坏的专用密码。"};
+        return {{}, "本机凭据校验失败，请重新连接 iCloud。"};
     }
     plaintext.resize(size + finalSize);
     return {plaintext, {}};

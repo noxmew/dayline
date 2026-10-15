@@ -67,7 +67,7 @@ ApplicationWindow {
                     implicitHeight: 63
                     Column {
                         spacing: 6
-                        Text { text: "日 笺  /  D A Y L I N E"; color: Theme.secondary; font.pixelSize: 9; font.weight: Font.Medium }
+                        Text { text: "日笺 · Dayline"; color: Theme.secondary; font.pixelSize: 9; font.weight: Font.Medium }
                         Text { text: calendarStore.monthLabel; color: Theme.text; font.pixelSize: 28; font.weight: Font.DemiBold }
                     }
                 }
@@ -134,9 +134,9 @@ ApplicationWindow {
                 anchors.fill: parent
                 spacing: 7
                 Icon { name: desktopController.locked ? "lock" : "desktop"; width: 12; height: 12; color: Theme.muted }
-                Text { text: desktopController.locked ? "双击日期记事 · 单击日程编辑" : "拖动标题或底栏移动 · 右下角调整大小"; color: Theme.secondary; font.pixelSize: 10 }
+                Text { text: desktopController.locked ? "双击日期新建日程 · 单击日程编辑" : "拖动标题或底栏移动 · 右下角调整大小"; color: Theme.secondary; font.pixelSize: 10 }
                 Item { Layout.fillWidth: true }
-                Text { text: calendarStore.demo ? "预览空间 · 本机保存" : "本机保存"; color: Theme.muted; font.pixelSize: 9 }
+                Text { visible: calendarStore.demo; text: "示例日历"; color: Theme.muted; font.pixelSize: 9 }
             }
             }
         }

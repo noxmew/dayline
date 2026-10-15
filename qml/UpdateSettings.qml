@@ -18,6 +18,8 @@ ApplicationWindow {
     transientParent: null
 
     function open() {
+        height = Math.min(updateChecker.releaseNotes.length > 0 ? 600 : 440,
+                          Math.max(minimumHeight, Screen.desktopAvailableHeight - 80))
         WindowPlacement.center(window, originWindow)
         show(); raise(); requestActivate()
         if (updateChecker.state === "idle" && updateChecker.configured) updateChecker.check()
@@ -39,7 +41,7 @@ ApplicationWindow {
             }
             ColumnLayout {
                 spacing: 5
-                Text { text: "日笺的新版本"; color: Theme.text; font.pixelSize: 22; font.weight: Font.DemiBold }
+                Text { text: "检查更新"; color: Theme.text; font.pixelSize: 22; font.weight: Font.DemiBold }
                 Text { text: "当前版本 " + Qt.application.version; color: Theme.secondary; font.pixelSize: 12 }
             }
             Item { Layout.fillWidth: true }
@@ -53,7 +55,7 @@ ApplicationWindow {
                 anchors.fill: parent; anchors.margins: 16; spacing: 10
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { text: updateChecker.latestVersion.length ? "最新版本 " + updateChecker.latestVersion : "手动检查更新"; color: Theme.text; font.pixelSize: 15; font.weight: Font.DemiBold }
+                    Text { text: updateChecker.latestVersion.length ? "最新版本 " + updateChecker.latestVersion : "版本信息"; color: Theme.text; font.pixelSize: 15; font.weight: Font.DemiBold }
                     Item { Layout.fillWidth: true }
                     Icon { width: 17; height: 17; name: updateChecker.state === "current" || updateChecker.state === "downloaded" ? "check" : "refresh"; color: Theme.accent }
                 }
@@ -135,9 +137,8 @@ ApplicationWindow {
         Item { Layout.fillHeight: true; visible: updateChecker.releaseNotes.length === 0 }
         Text {
             Layout.fillWidth: true
-            text: updateChecker.state === "downloaded"
-                ? "安装包保存在下载文件夹中。打开文件夹后，双击 .deb 交给系统安装。"
-                : "检查和下载在后台进行。安装包通过校验后保存在下载文件夹，由你决定何时安装。"
+            visible: updateChecker.state === "downloaded"
+            text: "打开下载文件夹，双击安装包安装。"
             color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5
         }
         RowLayout {

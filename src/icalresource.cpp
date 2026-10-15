@@ -209,21 +209,21 @@ QVariantList ICalResource::occurrences(const QByteArray &raw, const QDate &from,
     for (auto *event = icalcomponent_get_first_component(root.get(), ICAL_VEVENT_COMPONENT); event;
          event = icalcomponent_get_next_component(root.get(), ICAL_VEVENT_COMPONENT)) {
         if (!icalcomponent_get_first_property(event, ICAL_RECURRENCEID_PROPERTY)) {
-            if (master) { if (error) *error = "一个日程资源含多个主事件，已保留原文。"; return {}; }
+            if (master) { if (error) *error = "此日程包含多个主事件，暂不支持显示。"; return {}; }
             master = event;
         }
         for (auto *p = icalcomponent_get_first_property(event, ICAL_RRULE_PROPERTY); p;
              p = icalcomponent_get_next_property(event, ICAL_RRULE_PROPERTY)) {
             const auto rule = icalproperty_get_rrule(p);
             if (rule.freq == ICAL_SECONDLY_RECURRENCE || rule.freq == ICAL_MINUTELY_RECURRENCE || rule.freq == ICAL_HOURLY_RECURRENCE) {
-                if (error) *error = "当前预览版尚不展开小时、分钟或秒级重复日程，原始内容已保留。";
+                if (error) *error = "暂不支持显示按小时、分钟或秒重复的日程。";
                 return {};
             }
         }
         for (auto *p = icalcomponent_get_first_property(event, ICAL_RDATE_PROPERTY); p;
              p = icalcomponent_get_next_property(event, ICAL_RDATE_PROPERTY)) {
             if (!icaltime_is_null_time(icalproperty_get_rdate(p).period.start)) {
-                if (error) *error = "当前预览版尚不展开带独立时段的重复日期，原始内容已保留。";
+                if (error) *error = "暂不支持显示包含独立时间段的重复日程。";
                 return {};
             }
         }
@@ -234,7 +234,7 @@ QVariantList ICalResource::occurrences(const QByteArray &raw, const QDate &from,
         if (!icaltime_is_null_time(rid)) {
             auto *p = icalcomponent_get_first_property(event, ICAL_RECURRENCEID_PROPERTY);
             if (icalproperty_get_first_parameter(p, ICAL_RANGE_PARAMETER)) {
-                if (error) *error = "当前预览版尚不展开影响此后系列的重复例外，原始内容已保留。";
+                if (error) *error = "暂不支持显示包含“此后所有日程”修改的重复日程。";
                 return {};
             }
             if (master && property(master, ICAL_UID_PROPERTY) != property(event, ICAL_UID_PROPERTY)) {
@@ -258,7 +258,7 @@ QVariantList ICalResource::occurrences(const QByteArray &raw, const QDate &from,
         const bool readOnly = !editable(root.get(), event);
         QVariantMap base {{"title", property(event, ICAL_SUMMARY_PROPERTY)}, {"notes", property(event, ICAL_DESCRIPTION_PROPERTY)},
             {"location", property(event, ICAL_LOCATION_PROPERTY)}, {"uid", property(event, ICAL_UID_PROPERTY)},
-            {"readOnly", readOnly}, {"readOnlyReason", readOnly ? "此日程含重复规则、会议邀请或当前不支持的结构，已保留原文并以只读方式展示。" : ""}};
+            {"readOnly", readOnly}, {"readOnlyReason", readOnly ? "此日程包含重复规则、会议邀请或暂不支持的内容，只能查看。" : ""}};
         if (!icalcomponent_get_first_property(event, ICAL_RRULE_PROPERTY) &&
             !icalcomponent_get_first_property(event, ICAL_RDATE_PROPERTY)) {
             auto recurrenceStart = start;
@@ -339,7 +339,7 @@ QByteArray ICalResource::copy(const QByteArray &raw, const QString &uid, QString
     auto root = parse(raw);
     auto *event = root ? icalcomponent_get_first_component(root.get(), ICAL_VEVENT_COMPONENT) : nullptr;
     if (uid.isEmpty() || !event || !editable(root.get(), event)) {
-        if (error) *error = "此日程结构无法安全另存，原始内容已保留。";
+        if (error) *error = "暂不支持将此日程另存为副本。";
         return {};
     }
     replace(event, ICAL_UID_PROPERTY, icalproperty_new_uid(uid.toUtf8().constData()));

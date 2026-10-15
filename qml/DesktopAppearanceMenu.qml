@@ -7,13 +7,8 @@ SurfaceMenu {
     id: appearance
     Item {
         implicitWidth: 270
-        implicitHeight: 56
-        Column {
-            x: 12; y: 9
-            spacing: 5
-            Text { text: "桌面外观"; color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold }
-            Text { text: "让日历融入你的桌面"; color: Theme.muted; font.pixelSize: 10 }
-        }
+        implicitHeight: 38
+        Text { x: 12; y: 9; text: "桌面外观"; color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold }
     }
     MenuToggle {
         text: "锁定位置"
@@ -30,11 +25,11 @@ SurfaceMenu {
     MenuRule { }
     Item {
         implicitWidth: 270
-        implicitHeight: 86
+        implicitHeight: 66
         RowLayout {
             x: 12; y: 8
             width: parent.width - 24
-            Text { text: "背景透明度"; font.pixelSize: 11; color: Theme.secondary }
+            Text { text: "背景不透明度"; font.pixelSize: 11; color: Theme.secondary }
             Item { Layout.fillWidth: true }
             Text { text: Math.round(desktopController.panelOpacity * 100) + "%"; font.pixelSize: 11; font.weight: Font.Medium; color: Theme.accent }
         }
@@ -44,14 +39,7 @@ SurfaceMenu {
             from: 0.25; to: 1
             value: desktopController.panelOpacity
             onMoved: desktopController.panelOpacity = value
-            Accessible.name: "桌面日历背景透明度"
-        }
-        RowLayout {
-            x: 12; y: 61
-            width: parent.width - 24
-            Text { text: "通透"; font.pixelSize: 9; color: Theme.muted }
-            Item { Layout.fillWidth: true }
-            Text { text: "清晰"; font.pixelSize: 9; color: Theme.muted }
+            Accessible.name: "桌面日历背景不透明度"
         }
     }
     MenuRule { }

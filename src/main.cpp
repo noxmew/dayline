@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle("Basic");
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("Dayline 日笺 — 把日子，过得从容一点。");
+    parser.setApplicationDescription("Dayline 日笺 — Linux 桌面日历");
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption({"demo", "Open an isolated preview space with sample events."});

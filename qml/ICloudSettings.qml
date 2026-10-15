@@ -21,6 +21,8 @@ ApplicationWindow {
     function open() {
         accountField.text = iCloudSync.account
         regionField.currentIndex = iCloudSync.region === "china" ? 1 : 0
+        height = Math.min(iCloudSync.connected ? 760 : 560,
+                          Math.max(minimumHeight, Screen.desktopAvailableHeight - 80))
         WindowPlacement.center(window, originWindow)
         show(); raise(); requestActivate()
     }
@@ -57,18 +59,13 @@ ApplicationWindow {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 5
-                    Text { text: "让日程，在设备间流动"; color: Theme.text; font.pixelSize: 22; font.weight: Font.DemiBold }
+                    Text { text: "iCloud"; color: Theme.text; font.pixelSize: 22; font.weight: Font.DemiBold }
                     Text { Layout.fillWidth: true; text: iCloudSync.status; color: Theme.secondary; font.pixelSize: 11; wrapMode: Text.Wrap }
                 }
             }
-            InlineNotice {
-                Layout.fillWidth: true
-                iconName: "cloud"
-                text: "使用 Apple 账户和 App 专用密码直连 iCloud。专用密码在本机加密保存，日笺不设中转服务器。"
-            }
             Text {
                 Layout.fillWidth: true
-                text: "先为 Apple 账户开启双重认证，再生成 <a style='color:" + Theme.accent + "; text-decoration:none' href='https://account.apple.com/account/manage'>App 专用密码 ↗</a>。这里不要填写 Apple 账户的登录密码。"
+                text: "为 Apple 账户开启双重认证后，生成 <a style='color:" + Theme.accent + "; text-decoration:none' href='https://account.apple.com/account/manage'>App 专用密码 ↗</a>。请勿使用账户登录密码。"
                 textFormat: Text.RichText; wrapMode: Text.Wrap; color: Theme.secondary; linkColor: Theme.accent; font.pixelSize: 12; lineHeight: 1.5
                 onLinkActivated: link => window.browserOpenFailed = !Qt.openUrlExternally(link)
                 HoverHandler { cursorShape: parent.hoveredLink.length ? Qt.PointingHandCursor : Qt.ArrowCursor }
@@ -85,7 +82,7 @@ ApplicationWindow {
                 Field { id: accountField; Layout.fillWidth: true; placeholderText: "name@example.com"; enabled: !iCloudSync.busy && !iCloudSync.connected; inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText }
                 Text { text: "账户地区"; color: Theme.secondary; font.pixelSize: 12 }
                 SelectField { id: regionField; Layout.fillWidth: true; model: ["其他国家或地区", "中国大陆（云上贵州）"]; enabled: !iCloudSync.busy && !iCloudSync.connected }
-                Text { text: iCloudSync.connected ? "重新授权 · App 专用密码" : "App 专用密码"; color: Theme.secondary; font.pixelSize: 12 }
+                Text { text: "App 专用密码"; color: Theme.secondary; font.pixelSize: 12 }
                 Field {
                     id: passwordField
                     Layout.fillWidth: true
@@ -125,7 +122,7 @@ ApplicationWindow {
                     Item { Layout.fillWidth: true }
                     ActionButton { text: "立即同步"; iconName: "refresh"; enabled: !iCloudSync.busy; onClicked: iCloudSync.sync() }
                 }
-                Text { text: "每 60 秒同步；离线修改先保存在本机。"; color: Theme.muted; font.pixelSize: 11 }
+                Text { text: "每分钟自动同步，离线修改会在联网后上传。"; color: Theme.muted; font.pixelSize: 11 }
                 Repeater {
                     model: iCloudSync.calendars
                     delegate: Rectangle {
@@ -138,7 +135,7 @@ ApplicationWindow {
                             ColumnLayout {
                                 spacing: 4; Layout.fillWidth: true
                                 Text { text: calendarRow.modelData.name; color: Theme.text; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
-                                Text { text: !calendarRow.modelData.available ? "暂时不可用 · 保留本机缓存" : calendarRow.modelData.writable ? "可读写" : "只读"; color: Theme.muted; font.pixelSize: 10 }
+                                Text { text: !calendarRow.modelData.available ? "暂时不可用" : calendarRow.modelData.writable ? "可读写" : "只读"; color: Theme.muted; font.pixelSize: 10 }
                             }
                             ActionButton {
                                 visible: calendarRow.modelData.selected && calendarRow.modelData.writable && calendarRow.modelData.available
@@ -150,13 +147,13 @@ ApplicationWindow {
                         }
                     }
                 }
-                Text { visible: iCloudSync.calendars.length === 0; text: "账户中尚未发现可用的事件日历。"; color: Theme.muted; font.pixelSize: 12 }
-                Text { text: iCloudSync.lastSync.length ? "最近完成：" + new Date(iCloudSync.lastSync).toLocaleString(Qt.locale("zh_CN"), "M月d日 HH:mm:ss") : "尚未完成同步"; color: Theme.muted; font.pixelSize: 11 }
+                Text { visible: iCloudSync.calendars.length === 0; text: "未找到可用日历。"; color: Theme.muted; font.pixelSize: 12 }
+                Text { text: iCloudSync.lastSync.length ? "上次同步：" + new Date(iCloudSync.lastSync).toLocaleString(Qt.locale("zh_CN"), "M月d日 HH:mm:ss") : "尚未完成同步"; color: Theme.muted; font.pixelSize: 11 }
                 Text { text: "待同步：" + iCloudSync.pendingCount + " 项"; color: Theme.secondary; font.pixelSize: 12 }
             }
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 12; visible: iCloudSync.conflicts.length > 0
-                Text { text: "需要你决定"; color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+                Text { text: "同步问题"; color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
                 Repeater {
                     model: iCloudSync.conflicts
                     delegate: Rectangle {
@@ -197,11 +194,11 @@ ApplicationWindow {
             spacing: 18
             Rectangle { width: 40; height: 40; radius: 12; color: Theme.dangerSoft; Icon { anchors.centerIn: parent; name: "cloud"; width: 21; height: 21; color: Theme.danger } }
             Text { text: "断开 iCloud 账户？"; color: Theme.text; font.pixelSize: 20; font.weight: Font.DemiBold }
-            Text { text: "这会清除此设备上的 iCloud 缓存和专用密码。iCloud 中的日历和日程会保留；本机日历不受影响。仍有待同步修改时无法断开。"; color: Theme.secondary; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true; lineHeight: 1.5 }
+            Text { text: "将移除此设备上的 iCloud 日程和专用密码，云端内容与本机日历不受影响。请先完成待同步修改。"; color: Theme.secondary; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true; lineHeight: 1.5 }
             RowLayout {
                 Item { Layout.fillWidth: true }
                 ActionButton { text: "取消"; quiet: true; onClicked: disconnectDialog.close() }
-                ActionButton { text: "确认断开"; danger: true; primary: true; onClicked: { disconnectDialog.close(); iCloudSync.disconnectAccount() } }
+                ActionButton { text: "断开账户"; danger: true; primary: true; onClicked: { disconnectDialog.close(); iCloudSync.disconnectAccount() } }
             }
         }
     }

@@ -228,7 +228,7 @@ private:
             if (!m_file->commit()) { fail("无法保存完整安装包，请检查磁盘空间和下载目录权限。"); return; }
             m_file.reset(); m_hash.reset(); m_downloading = false;
             emit progress(m_written, m_size);
-            emit snapshot("downloaded", "安装包已下载并通过 SHA-256 校验。", m_version, m_notes, m_name, m_destination, m_size);
+            emit snapshot("downloaded", "安装包已下载并通过校验。", m_version, m_notes, m_name, m_destination, m_size);
         } else readRelease();
     }
 
@@ -265,11 +265,11 @@ private:
         m_size = asset.value("size").toVariant().toLongLong();
         if (matches != 1 || asset.value("state").toString() != "uploaded" || !digest.hasMatch() ||
             m_size <= 0 || m_size > MaximumPackageSize || asset.value("browser_download_url").toString() != expectedUrl) {
-            clearPackage(); fail("此版本尚无完整、可校验的对应架构安装包，请稍后再检查。"); return;
+            clearPackage(); fail("当前设备的安装包信息不完整，请稍后重试。"); return;
         }
         m_digest = QByteArray::fromHex(digest.captured(1).toLatin1());
         m_assetUrl = QUrl(expectedUrl);
-        emit snapshot("available", "有新版本可以下载。", m_version, m_notes, m_name, {}, m_size);
+        emit snapshot("available", "发现新版本。", m_version, m_notes, m_name, {}, m_size);
     }
 
     QNetworkAccessManager m_network;
@@ -288,7 +288,7 @@ private:
 UpdateChecker::UpdateChecker(QObject *parent) : QObject(parent), m_worker(new UpdateWorker), m_thread(new QThread(this))
 {
     m_configured = !proxyBase().isEmpty();
-    m_message = m_configured ? "检查日笺的新版本。" : "此构建未配置更新服务。请使用发布页面提供的安装包。";
+    m_message = m_configured ? "尚未检查更新。" : "此构建未配置更新服务。请使用发布页面提供的安装包。";
     m_worker->moveToThread(m_thread);
     connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
     connect(m_worker, &UpdateWorker::snapshot, this,
