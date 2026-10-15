@@ -40,6 +40,8 @@ qt_add_qml_module(dayline
         qml/Icon.qml
         qml/ActionButton.qml
         qml/Field.qml
+        qml/DateField.qml
+        qml/TimeField.qml
         qml/Toggle.qml
         qml/SurfaceMenu.qml
         qml/MenuEntry.qml

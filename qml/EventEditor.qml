@@ -31,8 +31,21 @@ ApplicationWindow {
         WindowPlacement.center(editor, originWindow)
         show(); raise(); requestActivate()
     }
-    onClosing: deleteDialog.close()
-    Shortcut { sequence: "Escape"; onActivated: editor.close() }
+    onClosing: {
+        dateField.closePicker()
+        endDateField.closePicker()
+        startField.closePicker()
+        endField.closePicker()
+        calendarField.popup.close()
+        deleteDialog.close()
+    }
+    Shortcut {
+        sequence: "Escape"
+        enabled: !dateField.pickerVisible && !endDateField.pickerVisible
+            && !startField.pickerVisible && !endField.pickerVisible
+            && !calendarField.popup.visible && !deleteDialog.visible
+        onActivated: editor.close()
+    }
     Connections {
         target: calendarStore
         function onChanged() { if (editor.visible) editor.refreshCalendarOptions() }
@@ -61,12 +74,12 @@ ApplicationWindow {
         readOnlyReason = ""
         syncState = "待保存"
         titleField.text = ""
-        dateField.text = date
-        endDateField.text = date
+        dateField.value = date
+        endDateField.value = date
         locationField.text = ""
         allDay.checked = true
-        startField.text = "09:00"
-        endField.text = "10:00"
+        startField.value = "09:00"
+        endField.value = "10:00"
         calendarOptions = calendarStore.writableCalendars
         var preferred = calendarOptions.findIndex(c => c.id === iCloudSync.defaultCalendar)
         calendarField.currentIndex = preferred >= 0 ? preferred : 0
@@ -85,12 +98,12 @@ ApplicationWindow {
         cloudEvent = !!event.cloud
         syncState = event.syncState || "本机日程"
         titleField.text = event.title
-        dateField.text = event.date
-        endDateField.text = event.endDate || event.date
+        dateField.value = event.date
+        endDateField.value = event.endDate || event.date
         locationField.text = event.location || ""
         allDay.checked = event.allDay
-        startField.text = event.allDay ? "09:00" : event.start
-        endField.text = event.allDay ? "10:00" : event.end
+        startField.value = event.allDay ? "09:00" : event.start
+        endField.value = event.allDay ? "10:00" : event.end
         chosenCalendarId = event.calendar
         chosenCalendarName = event.calendarName
         refreshCalendarOptions()
@@ -99,9 +112,9 @@ ApplicationWindow {
     }
     function save() {
         if (readOnlyEvent || calendarField.currentIndex < 0) return
-        if (calendarStore.saveEvent({id:eventId, title:titleField.text, date:dateField.text,
-            allDay:allDay.checked, start:startField.text, end:endField.text,
-            endDate:endDateField.text, location:locationField.text,
+        if (calendarStore.saveEvent({id:eventId, title:titleField.text, date:dateField.value,
+            allDay:allDay.checked, start:startField.value, end:endField.value,
+            endDate:endDateField.value, location:locationField.text,
             calendar:calendarOptions[calendarField.currentIndex].id, notes:notesField.text})) close()
     }
     ScrollView {
@@ -139,7 +152,7 @@ ApplicationWindow {
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 7
                 Text { text: editor.cloudEvent ? "开始日期" : "日期"; color: Theme.secondary; font.pixelSize: 11 }
-                Field { id: dateField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; inputMask: "0000-00-00"; placeholderText: "YYYY-MM-DD" }
+                DateField { id: dateField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: editor.cloudEvent ? "开始日期" : "日期" }
             }
             ColumnLayout {
                 Layout.preferredWidth: 150; spacing: 7
@@ -164,7 +177,7 @@ ApplicationWindow {
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 7
                 Text { text: allDay.checked ? "结束日期（包含这一天）" : "结束日期"; color: Theme.secondary; font.pixelSize: 11 }
-                Field { id: endDateField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; inputMask: "0000-00-00" }
+                DateField { id: endDateField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: "结束日期" }
             }
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 7
@@ -184,12 +197,12 @@ ApplicationWindow {
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 7
                 Text { text: "开始时间"; color: Theme.secondary; font.pixelSize: 11 }
-                Field { id: startField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; inputMask: "00:00"; text: "09:00" }
+                TimeField { id: startField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: "开始时间" }
             }
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 7
                 Text { text: "结束时间"; color: Theme.secondary; font.pixelSize: 11 }
-                Field { id: endField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; inputMask: "00:00"; text: "10:00" }
+                TimeField { id: endField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: "结束时间"; value: "10:00" }
             }
         }
         ColumnLayout {
