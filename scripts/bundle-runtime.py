@@ -33,6 +33,7 @@ SYSTEM_LIBRARIES = {
     "libSM.so.6": "libsm6",
     "libICE.so.6": "libice6",
     "libxcb.so.1": "libxcb1",
+    "libxcb-glx.so.0": "libxcb-glx0",
     "libxcb-icccm.so.4": "libxcb-icccm4",
     "libxcb-image.so.0": "libxcb-image0",
     "libxcb-keysyms.so.1": "libxcb-keysyms1",
