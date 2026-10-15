@@ -25,6 +25,18 @@ ApplicationWindow {
 
     function openNewEvent() { editor.create(calendarStore.selectedDate) }
 
+    component GeometryHandle: MouseArea {
+        property bool resizing: false
+        enabled: !desktopController.locked
+        acceptedButtons: Qt.LeftButton
+        preventStealing: true
+        cursorShape: resizing ? Qt.SizeFDiagCursor : Qt.SizeAllCursor
+        onPressed: resizing ? desktopController.beginResize() : desktopController.beginMove()
+        onPositionChanged: if (pressed) desktopController.updateInteraction()
+        onReleased: desktopController.endInteraction()
+        onCanceled: desktopController.endInteraction()
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: 18
@@ -42,8 +54,12 @@ ApplicationWindow {
             anchors.margins: 22
             spacing: 0
 
-            RowLayout {
+            Item {
                 Layout.fillWidth: true
+                implicitHeight: 63
+                GeometryHandle { anchors.fill: parent }
+            RowLayout {
+                anchors.fill: parent
                 spacing: 10
                 Item {
                     Layout.fillWidth: true
@@ -53,18 +69,6 @@ ApplicationWindow {
                         Text { text: "日 笺  /  D A Y L I N E"; color: Theme.secondary; font.pixelSize: 9; font.weight: Font.Medium }
                         Text { text: calendarStore.monthLabel; color: Theme.text; font.pixelSize: 28; font.weight: Font.DemiBold }
                     }
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: !desktopController.locked
-                        cursorShape: Qt.SizeAllCursor
-                        property point previous
-                        onPressed: previous = mapToGlobal(mouseX, mouseY)
-                        onPositionChanged: if (pressed) {
-                            const current = mapToGlobal(mouseX, mouseY)
-                            desktopController.moveBy(current.x - previous.x, current.y - previous.y)
-                            previous = current
-                        }
-                    }
                 }
                 ActionButton { text: "今天"; quiet: true; onClicked: calendarStore.goToday() }
                 ActionButton { iconName: "left"; hint: "上个月"; quiet: true; onClicked: calendarStore.changeMonth(-1) }
@@ -73,10 +77,17 @@ ApplicationWindow {
                 ActionButton { iconName: "plus"; hint: "新建日程"; quiet: true; onClicked: desktop.openNewEvent() }
                 ActionButton { iconName: "desktop"; hint: "打开日历窗口"; quiet: true; onClicked: desktopController.openManager() }
                 ActionButton {
+                    iconName: desktopController.locked ? "lock" : "unlock"
+                    hint: desktopController.locked ? "位置已锁定 · 点击解锁" : "可拖动标题或底栏 · 点击锁定"
+                    quiet: true
+                    onClicked: desktopController.locked = !desktopController.locked
+                }
+                ActionButton {
                     id: appearanceButton
                     iconName: "settings"; hint: "桌面外观与设置"; quiet: true
                     onClicked: appearanceMenu.popup(appearanceButton, appearanceButton.width - appearanceMenu.width, appearanceButton.height + 8)
                 }
+            }
             }
 
             Row {
@@ -113,29 +124,27 @@ ApplicationWindow {
                 }
             }
 
-            RowLayout {
+            Item {
                 Layout.fillWidth: true
                 Layout.topMargin: 16
+                implicitHeight: 18
+                GeometryHandle { anchors.fill: parent }
+            RowLayout {
+                anchors.fill: parent
                 spacing: 7
                 Icon { name: desktopController.locked ? "lock" : "desktop"; width: 12; height: 12; color: Theme.muted }
-                Text { text: desktopController.locked ? "双击日期记事 · 单击日程编辑" : "拖动标题移动 · 右下角调整大小"; color: Theme.secondary; font.pixelSize: 10 }
+                Text { text: desktopController.locked ? "双击日期记事 · 单击日程编辑" : "拖动标题或底栏移动 · 右下角调整大小"; color: Theme.secondary; font.pixelSize: 10 }
                 Item { Layout.fillWidth: true }
                 Text { text: calendarStore.demo ? "预览空间 · 本机保存" : "本机保存"; color: Theme.muted; font.pixelSize: 9 }
             }
+            }
         }
 
-        MouseArea {
+        GeometryHandle {
+            resizing: true
             visible: !desktopController.locked
             anchors.right: parent.right; anchors.bottom: parent.bottom
             width: 22; height: 22
-            cursorShape: Qt.SizeFDiagCursor
-            property point previous
-            onPressed: previous = mapToGlobal(mouseX, mouseY)
-            onPositionChanged: if (pressed) {
-                const current = mapToGlobal(mouseX, mouseY)
-                desktopController.resizeBy(current.x - previous.x, current.y - previous.y)
-                previous = current
-            }
             Text { anchors.centerIn: parent; text: "◢"; color: Theme.muted; font.pixelSize: 13 }
         }
     }

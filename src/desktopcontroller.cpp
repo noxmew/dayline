@@ -1,6 +1,7 @@
 #include "desktopcontroller.h"
 
 #include <QGuiApplication>
+#include <QCursor>
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusServiceWatcher>
@@ -148,6 +149,7 @@ qreal DesktopController::panelOpacity() const { return m_settings.value("desktop
 
 void DesktopController::setLocked(bool locked)
 {
+    if (locked) endInteraction();
     m_settings.setValue("desktop/locked", locked);
     emit appearanceChanged();
 }
@@ -202,26 +204,58 @@ void DesktopController::resetPosition()
 void DesktopController::constrainGeometry()
 {
     if (!m_desktop || !qGuiApp->primaryScreen()) return;
+    const QRect rect = constrainedGeometry(m_desktop->geometry());
+    if (rect != m_desktop->geometry()) m_desktop->setGeometry(rect);
+}
+
+QRect DesktopController::constrainedGeometry(QRect rect) const
+{
+    if (!qGuiApp->primaryScreen()) return rect;
     const QRect area = qGuiApp->primaryScreen()->availableGeometry();
-    QRect rect = m_desktop->geometry();
     rect.setSize(rect.size().boundedTo(area.size()));
     rect.moveLeft(qBound(area.left(), rect.left(), area.right() - rect.width() + 1));
     rect.moveTop(qBound(area.top(), rect.top(), area.bottom() - rect.height() + 1));
-    m_desktop->setGeometry(rect);
+    return rect;
 }
 
-void DesktopController::moveBy(int dx, int dy)
+void DesktopController::beginMove()
 {
     if (locked() || !m_desktop) return;
-    m_desktop->setPosition(m_desktop->position() + QPoint(dx, dy));
-    constrainGeometry();
+    m_interaction = Interaction::Move;
+    m_pointerOrigin = QCursor::pos();
+    m_geometryOrigin = m_desktop->geometry();
 }
 
-void DesktopController::resizeBy(int dx, int dy)
+void DesktopController::beginResize()
 {
     if (locked() || !m_desktop) return;
-    m_desktop->resize(qMax(700, m_desktop->width() + dx), qMax(520, m_desktop->height() + dy));
-    constrainGeometry();
+    m_interaction = Interaction::Resize;
+    m_pointerOrigin = QCursor::pos();
+    m_geometryOrigin = m_desktop->geometry();
+}
+
+void DesktopController::updateInteraction()
+{
+    if (locked() || !m_desktop || m_interaction == Interaction::None) return;
+    // Read the global pointer independently of the moving window's local
+    // coordinate system, and issue one final geometry request per motion.
+    const QPoint delta = QCursor::pos() - m_pointerOrigin;
+    QRect target = m_geometryOrigin;
+    if (m_interaction == Interaction::Move) {
+        target.translate(delta);
+    } else {
+        target.setSize(QSize(qMax(700, target.width() + delta.x()),
+                             qMax(520, target.height() + delta.y())));
+    }
+    target = constrainedGeometry(target);
+    if (target != m_desktop->geometry()) m_desktop->setGeometry(target);
+}
+
+void DesktopController::endInteraction()
+{
+    if (m_interaction == Interaction::None) return;
+    m_interaction = Interaction::None;
+    m_saveTimer.start();
 }
 
 void DesktopController::saveGeometry()

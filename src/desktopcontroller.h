@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QRect>
 #include <QSettings>
 #include <QTimer>
 
@@ -35,8 +36,10 @@ public:
     Q_INVOKABLE void openManager();
     Q_INVOKABLE void showDesktop();
     Q_INVOKABLE void resetPosition();
-    Q_INVOKABLE void moveBy(int dx, int dy);
-    Q_INVOKABLE void resizeBy(int dx, int dy);
+    Q_INVOKABLE void beginMove();
+    Q_INVOKABLE void beginResize();
+    Q_INVOKABLE void updateInteraction();
+    Q_INVOKABLE void endInteraction();
     Q_INVOKABLE void enableGnomeBridge();
 
 signals:
@@ -46,6 +49,7 @@ signals:
 
 private:
     void constrainGeometry();
+    QRect constrainedGeometry(QRect rect) const;
     void saveGeometry();
     void applyDesktopHints();
     void updateSupport();
@@ -59,4 +63,8 @@ private:
     bool m_requested;
     bool m_enabled = false;
     QString m_supportMessage;
+    enum class Interaction { None, Move, Resize };
+    Interaction m_interaction = Interaction::None;
+    QPoint m_pointerOrigin;
+    QRect m_geometryOrigin;
 };
