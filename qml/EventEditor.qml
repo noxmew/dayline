@@ -3,19 +3,25 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Dayline 1.0
 
-Dialog {
+ApplicationWindow {
     id: editor
+    objectName: "eventEditor"
     property string eventId: ""
     property var calendarOptions: [ {name:"工作",id:"work"}, {name:"生活",id:"life"}, {name:"灵感",id:"ideas"} ]
-    parent: Overlay.overlay
-    anchors.centerIn: parent
+    transientParent: null
+    title: eventId.length ? "编辑日程 · 日笺" : "新建日程 · 日笺"
     width: 490
-    modal: true
-    focus: true
-    padding: 26
-    closePolicy: Popup.CloseOnEscape
+    height: form.implicitHeight + 52
+    minimumWidth: 490
+    maximumWidth: 490
+    minimumHeight: height
+    maximumHeight: height
+    visible: false
     background: Rectangle { radius: 18; color: Theme.surface; border.color: Theme.line }
-    Overlay.modal: Rectangle { color: "#650E211A" }
+
+    function open() { show(); raise(); requestActivate() }
+    onClosing: deleteDialog.close()
+    Shortcut { sequence: "Escape"; onActivated: editor.close() }
 
     function create(date) {
         calendarStore.clearError()
@@ -47,7 +53,10 @@ Dialog {
             allDay:allDay.checked, start:startField.text, end:endField.text,
             calendar:calendarOptions[calendarField.currentIndex].id, notes:notesField.text})) close()
     }
-    contentItem: ColumnLayout {
+    ColumnLayout {
+        id: form
+        anchors.fill: parent
+        anchors.margins: 26
         spacing: 16
         RowLayout {
             Layout.fillWidth: true

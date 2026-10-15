@@ -1,0 +1,7 @@
+{
+  "uuid": "dayline-desktop@dayline",
+  "name": "Dayline Desktop Bridge",
+  "description": "Keep the Dayline calendar above desktop icons and below application windows.",
+  "shell-version": ["46"],
+  "version": 1
+}

@@ -9,7 +9,7 @@ ApplicationWindow {
     height: 930
     minimumWidth: 1220
     minimumHeight: 720
-    visible: true
+    visible: !desktopController.startOnDesktop
     title: "日笺 · Dayline" + (calendarStore.demo ? " · 预览空间" : "")
     color: Theme.background
     property string page: "calendar"
@@ -181,6 +181,7 @@ ApplicationWindow {
                     Rectangle { width: 1; height: 13; color: Theme.line }
                     Text { text: "让每一天，有迹可循"; color: Theme.muted; font.pixelSize: 10 }
                     Item { Layout.fillWidth: true }
+                    ActionButton { text: "贴到桌面"; iconName: "desktop"; enabled: desktopController.supported; onClicked: desktopController.showDesktop() }
                     Field {
                         id: searchField
                         Layout.preferredWidth: 188
@@ -440,7 +441,15 @@ ApplicationWindow {
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
             Text { text: "日笺  0.1 · 界面预览版"; color: Theme.secondary; font.pixelSize: 12 }
-            Text { Layout.fillWidth: true; text: "日程保存在本机。iCloud 同步与桌面常驻将在后续版本接入。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "桌面月历"; color: Theme.text; font.pixelSize: 13 }
+                Item { Layout.fillWidth: true }
+                Toggle { enabled: desktopController.supported; checked: desktopController.enabled; onToggled: desktopController.enabled = checked }
+            }
+            Text { Layout.fillWidth: true; text: desktopController.supportMessage; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
+            ActionButton { visible: desktopController.needsGnomeBridge && !desktopController.supported; text: "启用桌面桥"; onClicked: desktopController.enableGnomeBridge() }
+            Text { Layout.fillWidth: true; text: "日程保存在本机，iCloud 同步尚未接入。桌面月历右上角可调透明度、锁定位置或返回此窗口。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
         }
     }
 }

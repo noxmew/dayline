@@ -24,6 +24,10 @@ Canvas {
         function circle(x,y,r) { p.moveTo(x+r,y); p.arc(x,y,r,0,Math.PI*2) }
         p.beginPath()
         switch(name) {
+        case "desktop":
+            p.roundedRect(3,4,18,13,2,2); line(12,17,12,21); line(8,21,16,21); break
+        case "lock":
+            p.roundedRect(5,10,14,11,2,2); p.moveTo(8,10); p.lineTo(8,7); p.bezierCurveTo(8,1,16,1,16,7); p.lineTo(16,10); line(12,14,12,17); break
         case "calendar":
             p.roundedRect(4,5,16,16,3,3); line(4,10,20,10); line(8,3,8,7); line(16,3,16,7)
             line(8,14,10,14); line(14,14,16,14); line(8,17,10,17); break

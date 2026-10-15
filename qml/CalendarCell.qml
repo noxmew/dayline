@@ -4,12 +4,14 @@ import Dayline 1.0
 Rectangle {
     id: cell
     required property var info
-    readonly property int maxEvents: Math.max(1, Math.floor((height - 58) / 30))
-    readonly property bool compact: height < 90
+    property bool desktopStyle: false
+    readonly property int maxEvents: Math.max(1, Math.floor((height - (desktopStyle ? 44 : 58)) / (desktopStyle ? 25 : 30)))
+    readonly property bool compact: height < (desktopStyle ? 66 : 90)
     signal selected(string date)
     signal createRequested(string date)
     signal eventRequested(var event)
-    color: info.selected ? Theme.accentSoft : (hovered.hovered ? Theme.hover : (info.weekend ? Theme.panel : Theme.background))
+    color: desktopStyle ? (info.selected ? Theme.tint(Theme.accent, 0.12) : hovered.hovered ? Theme.tint(Theme.text, 0.05) : "transparent") :
+           (info.selected ? Theme.accentSoft : (hovered.hovered ? Theme.hover : (info.weekend ? Theme.panel : Theme.background)))
     clip: true
     Accessible.role: Accessible.Button
     Accessible.name: info.date + "，" + info.events.length + "项日程"
@@ -39,12 +41,12 @@ Rectangle {
     }
     Column {
         visible: !cell.compact
-        x: 7; y: 47; width: parent.width - 14; spacing: 5
+        x: 7; y: cell.desktopStyle ? 40 : 47; width: parent.width - 14; spacing: cell.desktopStyle ? 3 : 5
         Repeater {
             model: cell.info.events.slice(0, cell.maxEvents)
             delegate: Rectangle {
                 required property var modelData
-                width: parent.width; height: 25; radius: 5
+                width: parent.width; height: cell.desktopStyle ? 22 : 25; radius: 5
                 color: Theme.tint(modelData.color, Theme.dark ? 0.16 : 0.09)
                 Rectangle { x: 0; y: 5; width: 2; height: 15; radius: 1; color: modelData.color }
                 Text {
