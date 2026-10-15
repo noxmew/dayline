@@ -148,14 +148,14 @@ ApplicationWindow {
         }
         Field { id: titleField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; placeholderText: "日程标题"; font.pixelSize: 15; implicitHeight: 48; maximumLength: editor.originalCloudEvent && editor.eventId.length > 0 ? 2147483647 : 200 }
         RowLayout {
-            Layout.fillWidth: true; spacing: 14
+            Layout.fillWidth: true; spacing: 12
             ColumnLayout {
-                Layout.fillWidth: true; spacing: 7
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.minimumWidth: 0; spacing: 7
                 Text { text: editor.cloudEvent ? "开始日期" : "日期"; color: Theme.secondary; font.pixelSize: 11 }
                 DateField { id: dateField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: editor.cloudEvent ? "开始日期" : "日期" }
             }
             ColumnLayout {
-                Layout.preferredWidth: 150; spacing: 7
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.minimumWidth: 0; spacing: 7
                 Text { text: "日历"; color: Theme.secondary; font.pixelSize: 11 }
                 SelectField {
                     id: calendarField
@@ -175,12 +175,12 @@ ApplicationWindow {
             visible: editor.cloudEvent
             Layout.fillWidth: true; spacing: 12
             ColumnLayout {
-                Layout.fillWidth: true; spacing: 7
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.minimumWidth: 0; spacing: 7
                 Text { text: allDay.checked ? "结束日期（包含这一天）" : "结束日期"; color: Theme.secondary; font.pixelSize: 11 }
                 DateField { id: endDateField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: "结束日期" }
             }
             ColumnLayout {
-                Layout.fillWidth: true; spacing: 7
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.minimumWidth: 0; spacing: 7
                 Text { text: "地点"; color: Theme.secondary; font.pixelSize: 11 }
                 Field { id: locationField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; placeholderText: "添加地点" }
             }
@@ -195,12 +195,12 @@ ApplicationWindow {
             visible: !allDay.checked
             Layout.fillWidth: true; spacing: 12
             ColumnLayout {
-                Layout.fillWidth: true; spacing: 7
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.minimumWidth: 0; spacing: 7
                 Text { text: "开始时间"; color: Theme.secondary; font.pixelSize: 11 }
                 TimeField { id: startField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: "开始时间" }
             }
             ColumnLayout {
-                Layout.fillWidth: true; spacing: 7
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.minimumWidth: 0; spacing: 7
                 Text { text: "结束时间"; color: Theme.secondary; font.pixelSize: 11 }
                 TimeField { id: endField; readOnly: editor.readOnlyEvent; Layout.fillWidth: true; label: "结束时间"; value: "10:00" }
             }

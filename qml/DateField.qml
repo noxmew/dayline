@@ -12,10 +12,31 @@ ActionButton {
     readonly property date selectedDate: new Date(value + "T12:00:00")
     iconName: "calendar"
     text: Qt.formatDate(selectedDate, "yyyy年M月d日")
+    implicitWidth: dateContent.implicitWidth + leftPadding + rightPadding
     implicitHeight: 42
+    leftPadding: 12
+    rightPadding: 12
     enabled: !readOnly
     Accessible.name: label + "，" + text
     onClicked: picker.open()
+    contentItem: RowLayout {
+        id: dateContent
+        spacing: 8
+        Icon {
+            name: "calendar"
+            Layout.preferredWidth: 17; Layout.preferredHeight: 17
+            Layout.alignment: Qt.AlignVCenter
+            color: Theme.secondary
+        }
+        Text {
+            Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0
+            text: field.text
+            font.pixelSize: 13
+            color: Theme.text
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+    }
     background: Rectangle {
         radius: 9
         color: field.hovered ? Theme.hover : Theme.input
