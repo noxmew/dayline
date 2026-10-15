@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 env:
   RELEASE_VERSION: 0.1.${{ github.run_number }}
   RELEASE_TAG: v0.1.${{ github.run_number }}
@@ -145,15 +149,25 @@ jobs:
           <!-- ${marker} -->
           EOF
 
-          gh release create "$RELEASE_TAG" dist/*.deb dist/SHA256SUMS \
-            --target "$GITHUB_SHA" --title "Dayline ${RELEASE_VERSION}" \
-            --notes-file "$RUNNER_TEMP/dayline-release-notes.md" --draft --latest=false
-
-          draft="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" --slurp | \
-            jq -ce --arg tag "$RELEASE_TAG" --arg marker "$marker" \
-              '[.[][] | select(.tag_name == $tag and ((.body // "") | contains($marker)))] |
-               if length == 1 then .[0] else error("Expected exactly one draft for this workflow run") end')"
+          # Reserve the tag atomically. A rerun must stop rather than create
+          # another draft when a previous publication only partly completed.
+          gh api --method POST "repos/${GH_REPO}/git/refs" \
+            -f ref="refs/tags/${RELEASE_TAG}" -f sha="$GITHUB_SHA" --silent
+          draft="$(gh api --method POST "repos/${GH_REPO}/releases" \
+            -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" \
+            -f name="Dayline ${RELEASE_VERSION}" -F draft=true -f make_latest=false \
+            -F "body=@${RUNNER_TEMP}/dayline-release-notes.md")"
+          jq -e --arg tag "$RELEASE_TAG" --arg sha "$GITHUB_SHA" --arg marker "$marker" \
+            '.draft == true and .tag_name == $tag and .target_commitish == $sha and
+             ((.body // "") | contains($marker))' <<< "$draft" > /dev/null
           release_id="$(jq -r '.id' <<< "$draft")"
+          upload_url="$(jq -r '.upload_url | sub("\\{.*$"; "")' <<< "$draft")"
+          [[ "$upload_url" == "https://uploads.github.com/repos/${GH_REPO}/releases/${release_id}/assets" ]]
+          for asset in dist/*.deb dist/SHA256SUMS; do
+            name="$(basename "$asset")"
+            gh api --method POST "${upload_url}?name=${name}" \
+              --header 'Content-Type: application/octet-stream' --input "$asset" --silent
+          done
           release_json="$(gh api "repos/${GH_REPO}/releases/${release_id}")"
           jq -e --arg tag "$RELEASE_TAG" \
             '.tag_name == $tag and .draft == true and (.assets | length) == 3' \
