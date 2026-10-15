@@ -70,7 +70,7 @@ ActionButton {
                     model: ["一", "二", "三", "四", "五", "六", "日"]
                     delegate: Text {
                         required property string modelData
-                        Layout.fillWidth: true; implicitHeight: 20
+                        Layout.fillWidth: true; Layout.preferredHeight: 20
                         text: modelData; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 10; color: Theme.muted
                     }
