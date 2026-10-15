@@ -78,5 +78,33 @@ set(CPACK_PACKAGING_INSTALL_PREFIX /usr)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_STRIP_FILES ON)
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.38), libgcc-s1, libstdc++6 (>= 13.1), libqt6core6t64 (>= 6.4), libqt6gui6t64 (>= 6.4), libqt6qml6 (>= 6.4), libqt6quick6 (>= 6.4), libqt6quickcontrols2-6 (>= 6.4), libqt6sql6t64 (>= 6.4), libqt6dbus6t64 (>= 6.4), libqt6network6t64 (>= 6.4), libssl3t64 (>= 3.0), libical3t64 (>= 3.0), libxcb1, libqt6sql6-sqlite, qt6-qpa-plugins, qml6-module-qtqml, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtqml-models")
+# On amd64/arm64, Ubuntu's t64 packages and UOS 25's original package names
+# provide the same required SONAMEs. Keep both names with the same ABI floor.
+# The release workflow checks the executable's versioned ABI requirements.
+set(DAYLINE_DEBIAN_DEPENDENCIES
+    "libc6 (>= 2.38)"
+    "libgcc-s1"
+    "libstdc++6 (>= 12)"
+    "libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4)"
+    "libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4)"
+    "libqt6qml6 (>= 6.4)"
+    "libqt6quick6 (>= 6.4)"
+    "libqt6quickcontrols2-6 (>= 6.4)"
+    "libqt6sql6t64 (>= 6.4) | libqt6sql6 (>= 6.4)"
+    "libqt6dbus6t64 (>= 6.4) | libqt6dbus6 (>= 6.4)"
+    "libqt6network6t64 (>= 6.4) | libqt6network6 (>= 6.4)"
+    "libssl3t64 (>= 3.0) | libssl3 (>= 3.0)"
+    "libical3t64 (>= 3.0) | libical3 (>= 3.0)"
+    "libxcb1"
+    "libqt6sql6-sqlite"
+    "qml6-module-qtqml"
+    "qml6-module-qtquick"
+    "qml6-module-qtquick-controls"
+    "qml6-module-qtquick-layouts"
+    "qml6-module-qtquick-window"
+    "qml6-module-qtquick-templates"
+    "qml6-module-qtqml-workerscript"
+    "qml6-module-qtqml-models"
+)
+list(JOIN DAYLINE_DEBIAN_DEPENDENCIES ", " CPACK_DEBIAN_PACKAGE_DEPENDS)
 include(CPack)
