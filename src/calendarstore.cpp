@@ -1,4 +1,5 @@
 #include "calendarstore.h"
+#include "icloudsync.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -92,7 +93,35 @@ void CalendarStore::reload()
         event["dateLabel"] = QLocale("zh_CN").toString(date, "M月d日 ddd");
         m_events.append(event);
     }
+    if (m_icloud) {
+        const auto cloudEvents = m_icloud->events(m_month.addMonths(-1), m_month.addMonths(3));
+        for (const auto &item : cloudEvents) {
+            auto event = item.toMap();
+            QString displayEnd = event.value("endDate", event.value("date")).toString();
+            if (!event.value("allDay").toBool() && event.value("end").toString() == "00:00" && displayEnd > event.value("date").toString())
+                displayEnd = QDate::fromString(displayEnd, Qt::ISODate).addDays(-1).toString(Qt::ISODate);
+            event["displayEndDate"] = displayEnd;
+            event["timeLabel"] = event.value("allDay").toBool() ? "全天" : event.value("start").toString();
+            event["timeRange"] = event.value("allDay").toBool() ? "全天日程" : event.value("start").toString() + " — " + event.value("end").toString();
+            event["dateLabel"] = QLocale("zh_CN").toString(QDate::fromString(event.value("date").toString(), Qt::ISODate), "M月d日 ddd");
+            m_events.append(event);
+        }
+        std::stable_sort(m_events.begin(), m_events.end(), [](const QVariant &a, const QVariant &b) {
+            const auto x = a.toMap(), y = b.toMap();
+            if (x.value("date") != y.value("date")) return x.value("date").toString() < y.value("date").toString();
+            if (x.value("allDay") != y.value("allDay")) return x.value("allDay").toBool();
+            return x.value("start").toString() < y.value("start").toString();
+        });
+    }
     emit changed();
+}
+
+void CalendarStore::attachICloud(ICloudSync *sync)
+{
+    m_icloud = sync;
+    connect(sync, &ICloudSync::dataChanged, this, &CalendarStore::reload);
+    connect(sync, &ICloudSync::changed, this, &CalendarStore::changed);
+    reload();
 }
 
 QString CalendarStore::monthLabel() const
@@ -122,7 +151,7 @@ int CalendarStore::weekCount() const
 
 bool CalendarStore::includes(const QVariantMap &event) const
 {
-    return m_enabled.contains(event.value("calendar").toString()) &&
+    return (event.value("cloud").toBool() || m_enabled.contains(event.value("calendar").toString())) &&
            (m_search.isEmpty() || event.value("title").toString().contains(m_search, Qt::CaseInsensitive) ||
             event.value("notes").toString().contains(m_search, Qt::CaseInsensitive));
 }
@@ -132,7 +161,8 @@ QVariantList CalendarStore::eventsOn(const QDate &date) const
     QVariantList result;
     for (const QVariant &value : m_events) {
         const QVariantMap event = value.toMap();
-        if (event.value("date").toString() == date.toString(Qt::ISODate) && includes(event))
+        const QString start = event.value("date").toString(), end = event.value("displayEndDate", event.value("endDate", start)).toString();
+        if (start <= date.toString(Qt::ISODate) && end >= date.toString(Qt::ISODate) && includes(event))
             result.append(event);
     }
     return result;
@@ -164,6 +194,26 @@ QVariantList CalendarStore::calendars() const
         result.append(QVariantMap {{"id", id}, {"name", calendarName(id)},
             {"color", calendarColor(id)}, {"enabled", m_enabled.contains(id)}, {"count", count}});
     }
+    if (m_icloud) for (const auto &value : m_icloud->calendars()) {
+        auto calendar = value.toMap();
+        if (!calendar.value("selected").toBool()) continue;
+        int count = 0;
+        for (const auto &event : m_events) if (event.toMap().value("calendar") == calendar.value("id")) ++count;
+        calendar["count"] = count; result.append(calendar);
+    }
+    return result;
+}
+
+QVariantList CalendarStore::writableCalendars() const
+{
+    QVariantList result;
+    for (const QString &id : {QString("work"), QString("life"), QString("ideas")})
+        result.append(QVariantMap {{"id",id},{"name", calendarName(id) + " · 本机"}});
+    if (m_icloud) for (const auto &value : m_icloud->calendars()) {
+        const auto calendar = value.toMap();
+        if (calendar.value("selected").toBool() && calendar.value("writable").toBool() && calendar.value("available").toBool())
+            result.append(QVariantMap {{"id", calendar.value("id")},{"name", calendar.value("name").toString() + " · iCloud"}});
+    }
     return result;
 }
 
@@ -188,7 +238,8 @@ QVariantList CalendarStore::visibleEvents() const
     for (const QVariant &value : m_events) {
         const auto event = value.toMap();
         const QDate date = QDate::fromString(event.value("date").toString(), Qt::ISODate);
-        if (includes(event) && (!m_search.isEmpty() || (date.year() == m_month.year() && date.month() == m_month.month())))
+        const auto end = QDate::fromString(event.value("displayEndDate", event.value("endDate", event.value("date"))).toString(), Qt::ISODate);
+        if (includes(event) && (!m_search.isEmpty() || (date < m_month.addMonths(1) && end >= m_month)))
             result.append(value);
     }
     return result;
@@ -200,17 +251,18 @@ int CalendarStore::monthCount() const
     for (const QVariant &value : m_events) {
         const auto event = value.toMap();
         const QDate date = QDate::fromString(event.value("date").toString(), Qt::ISODate);
-        if (date.year() == m_month.year() && date.month() == m_month.month() && includes(event)) ++count;
+        const auto end = QDate::fromString(event.value("displayEndDate", event.value("endDate", event.value("date"))).toString(), Qt::ISODate);
+        if (date < m_month.addMonths(1) && end >= m_month && includes(event)) ++count;
     }
     return count;
 }
 
-void CalendarStore::changeMonth(int offset) { m_month = m_month.addMonths(offset); emit changed(); }
+void CalendarStore::changeMonth(int offset) { m_month = m_month.addMonths(offset); reload(); }
 void CalendarStore::goToday()
 {
     m_selected = QDate::currentDate();
     m_month = QDate(m_selected.year(), m_selected.month(), 1);
-    emit changed();
+    reload();
 }
 void CalendarStore::selectDate(const QString &iso)
 {
@@ -222,6 +274,13 @@ void CalendarStore::selectDate(const QString &iso)
 }
 void CalendarStore::toggleCalendar(const QString &id)
 {
+    if (id.startsWith("icloud:") && m_icloud) {
+        for (const auto &value : m_icloud->calendars()) {
+            const auto calendar = value.toMap();
+            if (calendar.value("id").toString() == id) m_icloud->selectCalendar(id, !calendar.value("selected").toBool());
+        }
+        return;
+    }
     if (m_enabled.contains(id)) m_enabled.remove(id);
     else m_enabled.insert(id);
     emit changed();
@@ -244,6 +303,13 @@ void CalendarStore::clearError() { setError({}); }
 bool CalendarStore::saveEvent(const QVariantMap &event)
 {
     clearError();
+    if (event.value("calendar").toString().startsWith("icloud:") && m_icloud) {
+        QString error;
+        if (!m_icloud->saveEvent(event, &error)) { setError(error); return false; }
+        m_selected = QDate::fromString(event.value("date").toString(), Qt::ISODate);
+        m_month = QDate(m_selected.year(), m_selected.month(), 1);
+        reload(); return true;
+    }
     const QString title = event.value("title").toString().trimmed();
     const QDate date = QDate::fromString(event.value("date").toString(), Qt::ISODate);
     const bool allDay = event.value("allDay").toBool();
@@ -279,6 +345,11 @@ bool CalendarStore::saveEvent(const QVariantMap &event)
 bool CalendarStore::deleteEvent(const QString &id)
 {
     clearError();
+    if (id.startsWith("icloud:") && m_icloud) {
+        QString error;
+        if (!m_icloud->deleteEvent(id, &error)) { setError(error); return false; }
+        return true;
+    }
     QSqlQuery query(m_db);
     query.prepare("DELETE FROM events WHERE id=?");
     query.addBindValue(id);

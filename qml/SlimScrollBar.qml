@@ -6,6 +6,7 @@ ScrollBar {
     id: bar
     padding: 2
     minimumSize: 0.08
+    visible: policy !== ScrollBar.AlwaysOff && size < 1
     contentItem: Rectangle {
         implicitWidth: 4
         implicitHeight: 4

@@ -7,13 +7,18 @@ project(Dayline VERSION ${DAYLINE_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-find_package(Qt6 6.4 REQUIRED COMPONENTS Quick QuickControls2 Sql DBus)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Quick QuickControls2 Sql DBus Network)
+find_path(ICAL_INCLUDE_DIR libical/ical.h REQUIRED)
+find_library(ICAL_LIBRARY NAMES ical libical.so.3 REQUIRED)
 find_path(XCB_INCLUDE_DIR xcb/xcb.h REQUIRED)
 find_library(XCB_LIBRARY xcb REQUIRED)
 qt_standard_project_setup()
 
 qt_add_executable(dayline src/main.cpp src/calendarstore.cpp src/calendarstore.h
-    src/desktopcontroller.cpp src/desktopcontroller.h)
+    src/desktopcontroller.cpp src/desktopcontroller.h
+    src/secretstore.cpp src/secretstore.h
+    src/icalresource.cpp src/icalresource.h
+    src/icloudsync.cpp src/icloudsync.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(dayline
     URI Dayline
@@ -39,10 +44,11 @@ qt_add_qml_module(dayline
         qml/CalendarCell.qml
         qml/MonthGrid.qml
         qml/EventEditor.qml
+        qml/ICloudSettings.qml
 )
-target_include_directories(dayline PRIVATE ${XCB_INCLUDE_DIR})
+target_include_directories(dayline PRIVATE ${XCB_INCLUDE_DIR} ${ICAL_INCLUDE_DIR})
 target_compile_definitions(dayline PRIVATE DAYLINE_VERSION="${PROJECT_VERSION}")
-target_link_libraries(dayline PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql Qt6::DBus ${XCB_LIBRARY})
+target_link_libraries(dayline PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql Qt6::DBus Qt6::Network ${XCB_LIBRARY} ${ICAL_LIBRARY})
 install(TARGETS dayline RUNTIME DESTINATION bin)
 install(FILES assets/dayline.desktop DESTINATION share/applications)
 install(FILES assets/dayline.svg DESTINATION share/icons/hicolor/scalable/apps)

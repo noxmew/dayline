@@ -17,6 +17,7 @@ ApplicationWindow {
     Binding { target: Theme; property: "dark"; value: calendarStore.darkMode }
 
     function openNewEvent() { editor.create(calendarStore.selectedDate) }
+    function openICloud() { cloudDialog.open() }
     Shortcut { sequence: "Ctrl+N"; onActivated: window.openNewEvent() }
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequence: "PgUp"; onActivated: calendarStore.changeMonth(-1) }
@@ -79,9 +80,9 @@ ApplicationWindow {
 
                 RowLayout {
                     Layout.topMargin: 31; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 9
-                    Text { text: "本机日历"; font.pixelSize: 10; color: Theme.muted }
+                    Text { text: "我的日历"; font.pixelSize: 10; color: Theme.muted }
                     Item { Layout.fillWidth: true }
-                    Text { text: "03"; font.pixelSize: 10; color: Theme.muted }
+                    Text { text: String(calendarStore.calendars.length).padStart(2, "0"); font.pixelSize: 10; color: Theme.muted }
                 }
                 Repeater {
                     model: calendarStore.calendars
@@ -152,14 +153,14 @@ ApplicationWindow {
                             Icon { name: "cloud"; width: 18; height: 18; color: Theme.accent }
                             Text { text: "与 iCloud 相连"; color: Theme.text; font.pixelSize: 12; font.weight: Font.Medium }
                         }
-                        Text { text: "让安排，在设备间流动。"; color: Theme.muted; font.pixelSize: 10 }
+                        Text { text: iCloudSync.status; color: Theme.muted; font.pixelSize: 10; width: parent.width; elide: Text.ElideRight }
                         AbstractButton {
                             width: parent.width; height: 20
                             Accessible.name: "查看 iCloud 同步状态"
                             onClicked: cloudDialog.open()
                             contentItem: Row {
                                 spacing: 7
-                                Text { text: "查看同步计划"; color: Theme.accent; font.pixelSize: 10 }
+                                Text { text: iCloudSync.connected ? "账户与同步" : "连接 iCloud"; color: Theme.accent; font.pixelSize: 10 }
                                 Icon { name: "arrow"; width: 14; height: 14; color: Theme.accent }
                             }
                         }
@@ -341,7 +342,12 @@ ApplicationWindow {
                     Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 120
                     clip: true
                     contentWidth: availableWidth
-                    ScrollBar.vertical: SlimScrollBar { }
+                    ScrollBar.vertical: SlimScrollBar {
+                        parent: dayScroll
+                        x: dayScroll.width - width
+                        y: dayScroll.topPadding
+                        height: dayScroll.availableHeight
+                    }
                     Column {
                         width: dayScroll.availableWidth
                         spacing: 11
@@ -405,21 +411,7 @@ ApplicationWindow {
 
     EventEditor { id: editor }
 
-    Dialog {
-        id: cloudDialog
-        parent: Overlay.overlay; anchors.centerIn: parent
-        width: 420; padding: 28; modal: true
-        background: Rectangle { color: Theme.surface; radius: 18; border.color: Theme.line }
-        Overlay.modal: Rectangle { color: "#650E211A" }
-        contentItem: ColumnLayout {
-            spacing: 17
-            Rectangle { width: 44; height: 44; radius: 13; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: "cloud"; width: 25; height: 25; color: Theme.accent } }
-            Text { text: "让日程，在设备间流动"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
-            Text { Layout.fillWidth: true; text: "iCloud 双向同步即将加入。当前版本的日程保存在本机，你可以先体验月历、日程编辑和外观。"; color: Theme.secondary; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.5 }
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 45; radius: 8; color: Theme.input; Text { anchors.centerIn: parent; text: "同步状态：尚未连接"; color: Theme.muted; font.pixelSize: 11 } }
-            ActionButton { Layout.alignment: Qt.AlignRight; text: "知道了"; primary: true; onClicked: cloudDialog.close() }
-        }
-    }
+    ICloudSettings { id: cloudDialog }
 
     Dialog {
         id: settingsDialog
@@ -477,7 +469,8 @@ ApplicationWindow {
                     ActionButton { visible: desktopController.needsGnomeBridge && !desktopController.supported; text: "启用桌面桥"; iconName: "desktop"; onClicked: desktopController.enableGnomeBridge() }
                 }
             }
-            Text { Layout.fillWidth: true; text: "日程保存在本机，iCloud 同步尚未接入。桌面月历右上角可调透明度、锁定位置或返回此窗口。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
+            ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }
+            Text { Layout.fillWidth: true; text: "本机日历留在当前设备。选择 iCloud 日历记录的日程会先保存在本机，再同步到云端。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
             RowLayout {
                 Layout.fillWidth: true

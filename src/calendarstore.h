@@ -7,6 +7,8 @@
 #include <QSqlDatabase>
 #include <QVariantList>
 
+class ICloudSync;
+
 class CalendarStore final : public QObject
 {
     Q_OBJECT
@@ -19,6 +21,7 @@ class CalendarStore final : public QObject
     Q_PROPERTY(bool selectedIsToday READ selectedIsToday NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList monthDays READ monthDays NOTIFY changed)
     Q_PROPERTY(QVariantList calendars READ calendars NOTIFY changed)
+    Q_PROPERTY(QVariantList writableCalendars READ writableCalendars NOTIFY changed)
     Q_PROPERTY(QVariantList selectedEvents READ selectedEvents NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList upcomingEvents READ upcomingEvents NOTIFY changed)
     Q_PROPERTY(QVariantList visibleEvents READ visibleEvents NOTIFY changed)
@@ -41,6 +44,9 @@ public:
     bool selectedIsToday() const { return m_selected == QDate::currentDate(); }
     QVariantList monthDays() const;
     QVariantList calendars() const;
+    QVariantList writableCalendars() const;
+    void attachICloud(ICloudSync *sync);
+    QString databasePath() const { return m_db.databaseName(); }
     QVariantList selectedEvents() const;
     QVariantList upcomingEvents() const;
     QVariantList visibleEvents() const;
@@ -85,4 +91,5 @@ private:
     QSet<QString> m_enabled {"work", "life", "ideas"};
     QString m_search;
     QString m_error;
+    ICloudSync *m_icloud = nullptr;
 };
