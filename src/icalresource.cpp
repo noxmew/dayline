@@ -128,6 +128,28 @@ void replace(icalcomponent *event, icalproperty_kind kind, icalproperty *replace
     }
     icalcomponent_add_property(event, replacement);
 }
+void updateText(icalcomponent *event, icalproperty_kind kind, QString value, bool trim = false)
+{
+    const QString previous = property(event, kind);
+    if (previous == value) return;
+    if (trim) value = value.trimmed();
+    if (previous == value) return;
+    auto *p = icalcomponent_get_first_property(event, kind);
+    if (!p) {
+        p = icalproperty_new(kind);
+        icalcomponent_add_property(event, p);
+    }
+    // The alternate representation describes the old text. Keep other
+    // parameters and any additional properties that the editor did not show.
+    icalproperty_remove_parameter_by_kind(p, ICAL_ALTREP_PARAMETER);
+    const auto text = value.toUtf8();
+    switch (kind) {
+    case ICAL_SUMMARY_PROPERTY: icalproperty_set_summary(p, text.constData()); break;
+    case ICAL_DESCRIPTION_PROPERTY: icalproperty_set_description(p, text.constData()); break;
+    case ICAL_LOCATION_PROPERTY: icalproperty_set_location(p, text.constData()); break;
+    default: break;
+    }
+}
 icalproperty *timeProperty(icalcomponent *root, icalcomponent *event, icalproperty_kind kind,
                           const QDate &day, const QTime &time, bool allDay)
 {
@@ -239,6 +261,9 @@ QVariantList ICalResource::occurrences(const QByteArray &raw, const QDate &from,
             {"readOnly", readOnly}, {"readOnlyReason", readOnly ? "此日程含重复规则、会议邀请或当前不支持的结构，已保留原文并以只读方式展示。" : ""}};
         if (!icalcomponent_get_first_property(event, ICAL_RRULE_PROPERTY) &&
             !icalcomponent_get_first_property(event, ICAL_RDATE_PROPERTY)) {
+            auto recurrenceStart = start;
+            auto candidate = start;
+            if (icalproperty_recurrence_is_excluded(event, &recurrenceStart, &candidate)) continue;
             const auto begin = localTime(root.get(), event, start, ICAL_DTSTART_PROPERTY);
             auto end = icalcomponent_get_dtend(event);
             if (!icalcomponent_get_first_property(event, ICAL_DTEND_PROPERTY)) {
@@ -292,9 +317,9 @@ QByteArray ICalResource::edit(const QByteArray &raw, const QVariantMap &fields, 
     auto *endProperty = timeProperty(root.get(), event, ICAL_DTEND_PROPERTY, allDay ? last.addDays(1) : last, end, allDay);
     replace(event, ICAL_DTSTART_PROPERTY, startProperty);
     replace(event, ICAL_DTEND_PROPERTY, endProperty);
-    replace(event, ICAL_SUMMARY_PROPERTY, icalproperty_new_summary(fields.value("title").toString().trimmed().toUtf8().constData()));
-    replace(event, ICAL_DESCRIPTION_PROPERTY, icalproperty_new_description(fields.value("notes").toString().toUtf8().constData()));
-    replace(event, ICAL_LOCATION_PROPERTY, icalproperty_new_location(fields.value("location").toString().toUtf8().constData()));
+    updateText(event, ICAL_SUMMARY_PROPERTY, fields.value("title").toString(), true);
+    if (fields.contains("notes")) updateText(event, ICAL_DESCRIPTION_PROPERTY, fields.value("notes").toString());
+    if (fields.contains("location")) updateText(event, ICAL_LOCATION_PROPERTY, fields.value("location").toString());
     const auto now = icaltime_from_timet_with_zone(QDateTime::currentSecsSinceEpoch(), 0, icaltimezone_get_utc_timezone());
     replace(event, ICAL_DTSTAMP_PROPERTY, icalproperty_new_dtstamp(now));
     replace(event, ICAL_LASTMODIFIED_PROPERTY, icalproperty_new_lastmodified(now));
@@ -326,4 +351,18 @@ QString ICalResource::title(const QByteArray &raw)
     auto root = parse(raw);
     auto *event = root ? icalcomponent_get_first_component(root.get(), ICAL_VEVENT_COMPONENT) : nullptr;
     return event ? property(event, ICAL_SUMMARY_PROPERTY) : QStringLiteral("无法解析的日程");
+}
+
+QString ICalResource::uid(const QByteArray &raw)
+{
+    auto root = parse(raw);
+    if (!root || icalcomponent_isa(root.get()) != ICAL_VCALENDAR_COMPONENT || icalcomponent_count_errors(root.get())) return {};
+    QString result;
+    for (auto *event = icalcomponent_get_first_component(root.get(), ICAL_VEVENT_COMPONENT); event;
+         event = icalcomponent_get_next_component(root.get(), ICAL_VEVENT_COMPONENT)) {
+        const QString current = property(event, ICAL_UID_PROPERTY);
+        if (current.isEmpty() || (!result.isEmpty() && result != current)) return {};
+        result = current;
+    }
+    return result;
 }

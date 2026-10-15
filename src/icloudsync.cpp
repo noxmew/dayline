@@ -387,18 +387,18 @@ bool ICloudSync::acceptRemote(const QString &calendar, const QString &href, cons
 {
     QSqlQuery q(m_db); q.prepare("SELECT raw,pending,uncertain FROM icloud_resources WHERE href=?"); q.addBindValue(href); q.exec();
     const bool exists = q.next();
-    QString parseError; const auto parsed = ICalResource::occurrences(raw, QDate::currentDate().addYears(-1), QDate::currentDate().addYears(2), &parseError);
-    const QString uid = parsed.isEmpty() ? QString() : parsed.first().toMap().value("uid").toString();
+    QString parseError; ICalResource::occurrences(raw, QDate::currentDate().addYears(-1), QDate::currentDate().addYears(2), &parseError);
+    const QString uid = ICalResource::uid(raw);
     if (exists && !q.value(1).toString().isEmpty()) {
         if (q.value(2).toBool() && q.value(1).toString() != "delete" && q.value(0).toByteArray() == raw) {
-            return sql("UPDATE icloud_resources SET raw=?,baseline=?,etag=?,pending='',uncertain=0,conflict=0,remote_raw=X'',remote_etag='',error=? WHERE href=?", {raw,raw,etag,parseError,href});
+            return sql("UPDATE icloud_resources SET uid=?,raw=?,baseline=?,etag=?,pending='',uncertain=0,conflict=0,remote_raw=X'',remote_etag='',error=? WHERE href=?", {uid,raw,raw,etag,parseError,href});
         } else if (q.value(2).toBool()) {
             QSqlQuery baseline(m_db); baseline.prepare("SELECT baseline,etag FROM icloud_resources WHERE href=?"); baseline.addBindValue(href); baseline.exec();
             if (baseline.next() && baseline.value(0).toByteArray() == raw && baseline.value(1).toString() == etag)
                 return sql("UPDATE icloud_resources SET uncertain=0 WHERE href=?", {href});
         }
         return sql("UPDATE icloud_resources SET conflict=1,remote_raw=?,remote_etag=?,uncertain=0 WHERE href=?", {raw,etag,href});
-    } else return sql("INSERT INTO icloud_resources(href,id,calendar,uid,etag,raw,baseline,error) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(href) DO UPDATE SET etag=excluded.etag,raw=excluded.raw,baseline=excluded.baseline,error=excluded.error,conflict=0,remote_raw=X'',remote_etag=''",
+    } else return sql("INSERT INTO icloud_resources(href,id,calendar,uid,etag,raw,baseline,error) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(href) DO UPDATE SET uid=excluded.uid,etag=excluded.etag,raw=excluded.raw,baseline=excluded.baseline,error=excluded.error,conflict=0,remote_raw=X'',remote_etag=''",
         {href,eventId(href),calendar,uid,etag,raw,raw,parseError});
 }
 void ICloudSync::uploadNext()
@@ -447,7 +447,7 @@ void ICloudSync::confirmWrite(const QString &href, const QString &operation, con
         // Servers may normalize harmless serialization details. An unrecognized difference remains a conflict.
         bool ok = false;
         if (operation != "delete" && (local == r.body || (!confirmedEtag.isEmpty() && confirmedEtag == r.etag))) {
-            ok = sql("UPDATE icloud_resources SET raw=?,baseline=?,etag=?,pending='',uncertain=0,conflict=0,remote_raw=X'',remote_etag='' WHERE href=?", {r.body,r.body,QString::fromUtf8(r.etag),href});
+            ok = sql("UPDATE icloud_resources SET uid=?,raw=?,baseline=?,etag=?,pending='',uncertain=0,conflict=0,remote_raw=X'',remote_etag='' WHERE href=?", {ICalResource::uid(r.body),r.body,r.body,QString::fromUtf8(r.etag),href});
         } else if (operation != "create" && q.value(2).toByteArray() == r.etag && q.value(1).toByteArray() == r.body) {
             ok = sql("UPDATE icloud_resources SET uncertain=0 WHERE href=?", {href});
         } else {
@@ -504,10 +504,11 @@ bool ICloudSync::saveEvent(const QVariantMap &fields, QString *error)
     }
     const auto raw = ICalResource::edit(original, fields, storedUid, error);
     if (raw.isEmpty()) return false;
+    storedUid = ICalResource::uid(raw);
     // Local content and the outgoing operation are one atomic persistent record.
     if (!m_db.transaction()) { *error = "无法开始保存。"; return false; }
     bool ok = id.isEmpty() ? sql("INSERT INTO icloud_resources(href,id,calendar,uid,raw,pending) VALUES(?,?,?,?,?,?)", {href,eventId(href),calendar,storedUid,raw,pending}) :
-        sql("UPDATE icloud_resources SET raw=?,pending=?,error='' WHERE id=?", {raw,pending,id});
+        sql("UPDATE icloud_resources SET uid=?,raw=?,pending=?,error='' WHERE id=?", {storedUid,raw,pending,id});
     if (!ok || !m_db.commit()) { m_db.rollback(); *error = "无法保存日程及待同步状态。"; return false; }
     emit dataChanged(); emit changed(); queueSync(); return true;
 }
@@ -529,7 +530,7 @@ void ICloudSync::resolveConflict(const QString &id, const QString &resolution)
     bool ok = false;
     if (resolution == "remote") {
         ok = deleted ? sql("DELETE FROM icloud_resources WHERE id=?", {id}) :
-            sql("UPDATE icloud_resources SET raw=remote_raw,baseline=remote_raw,etag=remote_etag,pending='',conflict=0,remote_raw=X'',remote_etag='',error='' WHERE id=?", {id});
+            sql("UPDATE icloud_resources SET uid=?,raw=remote_raw,baseline=remote_raw,etag=remote_etag,pending='',conflict=0,remote_raw=X'',remote_etag='',error='' WHERE id=?", {ICalResource::uid(q.value(3).toByteArray()),id});
     } else if (resolution == "local" && !deleted) {
         if (!ICalResource::canEdit(q.value(3).toByteArray())) {
             fail("云端日程现在含只读结构，不能直接覆盖。请采用云端，或将本机内容另存为新日程。" ); return;
@@ -548,7 +549,7 @@ void ICloudSync::resolveConflict(const QString &id, const QString &resolution)
             m_db.rollback(); fail("无法保存日程副本。" ); return;
         }
         ok = deleted ? sql("DELETE FROM icloud_resources WHERE id=?", {id}) :
-            sql("UPDATE icloud_resources SET raw=remote_raw,baseline=remote_raw,etag=remote_etag,pending='',conflict=0,remote_raw=X'',remote_etag='',error='' WHERE id=?", {id});
+            sql("UPDATE icloud_resources SET uid=?,raw=remote_raw,baseline=remote_raw,etag=remote_etag,pending='',conflict=0,remote_raw=X'',remote_etag='',error='' WHERE id=?", {ICalResource::uid(q.value(3).toByteArray()),id});
         if (!ok || !m_db.commit()) { m_db.rollback(); fail("无法完整保存冲突处理结果。" ); return; }
     }
     if (!ok) { fail("无法保存冲突处理结果。" ); return; }
