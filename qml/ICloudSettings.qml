@@ -31,13 +31,21 @@ ApplicationWindow {
         anchors.margins: 28
         clip: true
         contentWidth: availableWidth
+        contentHeight: Math.ceil(accountContent.implicitHeight)
+        rightPadding: accountBar.visible ? accountBar.width + 8 : 0
+        bottomPadding: 8
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         ScrollBar.vertical: SlimScrollBar {
+            id: accountBar
             parent: accountScroll
+            policy: ScrollBar.AsNeeded
+            visible: accountScroll.contentHeight > accountScroll.availableHeight + 1
             x: accountScroll.width - width
             y: accountScroll.topPadding
             height: accountScroll.availableHeight
         }
         ColumnLayout {
+            id: accountContent
             width: accountScroll.availableWidth
             spacing: 20
             RowLayout {

@@ -2,8 +2,10 @@
 #include "icloudsync.h"
 
 #include <QDir>
+#include <QColor>
 #include <QFileInfo>
 #include <QLocale>
+#include <QRegularExpression>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -45,36 +47,47 @@ bool CalendarStore::initialize()
         setError(query.lastError().text());
         return false;
     }
+    if (!query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='local_calendars'")) {
+        setError("无法读取本机日历分类。"); return false;
+    }
+    const bool createCalendars = !query.next();
+    query.finish();
+    if (createCalendars) {
+        if (!m_db.transaction()) { setError("无法初始化本机日历分类。"); return false; }
+        const bool created = query.exec("CREATE TABLE local_calendars (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, enabled INTEGER NOT NULL, sort_order INTEGER NOT NULL)") &&
+            query.exec("INSERT INTO local_calendars VALUES ('work','工作','#218572',1,0),('life','生活','#C28B45',1,1),('ideas','灵感','#8273B3',1,2)");
+        if (!created || !m_db.commit()) {
+            m_db.rollback(); setError("无法初始化本机日历分类。"); return false;
+        }
+    }
     if (m_demo && newDatabase)
         seedPreview();
     reload();
     return m_error.isEmpty();
 }
 
-QString CalendarStore::calendarColor(const QString &id)
-{
-    if (id == "work") return "#218572";
-    if (id == "life") return "#C28B45";
-    return "#8273B3";
-}
-
-QString CalendarStore::calendarName(const QString &id)
-{
-    if (id == "work") return "工作";
-    if (id == "life") return "生活";
-    return "灵感";
-}
-
 void CalendarStore::reload()
 {
     QSqlQuery query(m_db);
-    if (!query.exec("SELECT id,title,date,all_day,start_time,end_time,calendar,notes "
-                    "FROM events ORDER BY date, all_day DESC, start_time, title")) {
+    if (!query.exec("SELECT id,name,color,enabled FROM local_calendars ORDER BY sort_order,id")) {
+        setError("无法读取本机日历分类。"); return;
+    }
+    QVariantList localCalendars;
+    QSet<QString> enabled;
+    while (query.next()) {
+        localCalendars.append(QVariantMap {{"id",query.value(0)}, {"name",query.value(1)}, {"color",query.value(2)},
+            {"enabled",query.value(3).toBool()}, {"cloud",false}});
+        if (query.value(3).toBool()) enabled.insert(query.value(0).toString());
+    }
+    if (localCalendars.isEmpty()) { setError("本机日历分类为空，请检查本机数据。"); return; }
+    if (!query.exec("SELECT e.id,e.title,e.date,e.all_day,e.start_time,e.end_time,e.calendar,e.notes,c.color,c.name,c.id "
+                    "FROM events e LEFT JOIN local_calendars c ON c.id=e.calendar ORDER BY e.date,e.all_day DESC,e.start_time,e.title")) {
         setError(query.lastError().text());
         return;
     }
-    m_events.clear();
+    QVariantList events;
     while (query.next()) {
+        if (query.value(10).isNull()) { setError("日程所属的本机日历分类不存在，请检查本机数据。"); return; }
         QVariantMap event;
         event["id"] = query.value(0);
         event["title"] = query.value(1);
@@ -84,14 +97,14 @@ void CalendarStore::reload()
         event["end"] = query.value(5);
         event["calendar"] = query.value(6);
         event["notes"] = query.value(7);
-        event["color"] = calendarColor(query.value(6).toString());
-        event["calendarName"] = calendarName(query.value(6).toString());
+        event["color"] = query.value(8);
+        event["calendarName"] = query.value(9);
         event["timeLabel"] = query.value(3).toBool() ? "全天" : query.value(4).toString();
         event["timeRange"] = query.value(3).toBool() ? "全天日程" :
             query.value(4).toString() + " — " + query.value(5).toString();
         const QDate date = QDate::fromString(query.value(2).toString(), Qt::ISODate);
         event["dateLabel"] = QLocale("zh_CN").toString(date, "M月d日 ddd");
-        m_events.append(event);
+        events.append(event);
     }
     if (m_icloud) {
         const auto cloudEvents = m_icloud->events(m_month.addMonths(-1), m_month.addMonths(3));
@@ -104,15 +117,18 @@ void CalendarStore::reload()
             event["timeLabel"] = event.value("allDay").toBool() ? "全天" : event.value("start").toString();
             event["timeRange"] = event.value("allDay").toBool() ? "全天日程" : event.value("start").toString() + " — " + event.value("end").toString();
             event["dateLabel"] = QLocale("zh_CN").toString(QDate::fromString(event.value("date").toString(), Qt::ISODate), "M月d日 ddd");
-            m_events.append(event);
+            events.append(event);
         }
-        std::stable_sort(m_events.begin(), m_events.end(), [](const QVariant &a, const QVariant &b) {
+        std::stable_sort(events.begin(), events.end(), [](const QVariant &a, const QVariant &b) {
             const auto x = a.toMap(), y = b.toMap();
             if (x.value("date") != y.value("date")) return x.value("date").toString() < y.value("date").toString();
             if (x.value("allDay") != y.value("allDay")) return x.value("allDay").toBool();
             return x.value("start").toString() < y.value("start").toString();
         });
     }
+    m_localCalendars = localCalendars;
+    m_enabled = enabled;
+    m_events = events;
     emit changed();
 }
 
@@ -153,7 +169,8 @@ bool CalendarStore::includes(const QVariantMap &event) const
 {
     return (event.value("cloud").toBool() || m_enabled.contains(event.value("calendar").toString())) &&
            (m_search.isEmpty() || event.value("title").toString().contains(m_search, Qt::CaseInsensitive) ||
-            event.value("notes").toString().contains(m_search, Qt::CaseInsensitive));
+            event.value("notes").toString().contains(m_search, Qt::CaseInsensitive) ||
+            event.value("calendarName").toString().contains(m_search, Qt::CaseInsensitive));
 }
 
 QVariantList CalendarStore::eventsOn(const QDate &date) const
@@ -184,16 +201,23 @@ QVariantList CalendarStore::monthDays() const
     return result;
 }
 
-QVariantList CalendarStore::calendars() const
+QVariantList CalendarStore::localCalendars() const
 {
     QVariantList result;
-    for (const QString &id : {QString("work"), QString("life"), QString("ideas")}) {
+    for (const auto &value : m_localCalendars) {
+        auto calendar = value.toMap();
         int count = 0;
-        for (const QVariant &value : m_events)
-            if (value.toMap().value("calendar").toString() == id) ++count;
-        result.append(QVariantMap {{"id", id}, {"name", calendarName(id)},
-            {"color", calendarColor(id)}, {"enabled", m_enabled.contains(id)}, {"count", count}});
+        for (const auto &event : m_events)
+            if (event.toMap().value("calendar") == calendar.value("id")) ++count;
+        calendar["count"] = count;
+        result.append(calendar);
     }
+    return result;
+}
+
+QVariantList CalendarStore::calendars() const
+{
+    QVariantList result = localCalendars();
     if (m_icloud) for (const auto &value : m_icloud->calendars()) {
         auto calendar = value.toMap();
         if (!calendar.value("selected").toBool()) continue;
@@ -207,8 +231,10 @@ QVariantList CalendarStore::calendars() const
 QVariantList CalendarStore::writableCalendars() const
 {
     QVariantList result;
-    for (const QString &id : {QString("work"), QString("life"), QString("ideas")})
-        result.append(QVariantMap {{"id",id},{"name", calendarName(id) + " · 本机"}});
+    for (const auto &value : m_localCalendars) {
+        const auto calendar = value.toMap();
+        result.append(QVariantMap {{"id",calendar.value("id")},{"name",calendar.value("name").toString() + " · 本机"}});
+    }
     if (m_icloud) for (const auto &value : m_icloud->calendars()) {
         const auto calendar = value.toMap();
         if (calendar.value("selected").toBool() && calendar.value("writable").toBool() && calendar.value("available").toBool())
@@ -281,9 +307,77 @@ void CalendarStore::toggleCalendar(const QString &id)
         }
         return;
     }
-    if (m_enabled.contains(id)) m_enabled.remove(id);
-    else m_enabled.insert(id);
-    emit changed();
+    clearError();
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE local_calendars SET enabled=1-enabled WHERE id=?"); query.addBindValue(id);
+    if (!query.exec() || query.numRowsAffected() != 1) { setError("无法更改本机日历的显示状态。"); return; }
+    reload();
+}
+
+bool CalendarStore::saveCalendar(const QString &id, const QString &name, const QString &color)
+{
+    clearError();
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty() || trimmed.size() > 30) { setError("分类名称请填写 1 到 30 个字。"); return false; }
+    if (!QRegularExpression("^#[0-9a-fA-F]{6}$").match(color).hasMatch() || !QColor(color).isValid()) {
+        setError("颜色请使用 #RRGGBB 格式。"); return false;
+    }
+    bool exists = id.isEmpty();
+    for (const auto &value : m_localCalendars) {
+        const auto calendar = value.toMap();
+        if (calendar.value("id").toString() == id) exists = true;
+        else if (calendar.value("name").toString().compare(trimmed, Qt::CaseInsensitive) == 0) {
+            setError("已有同名的本机分类，请换一个名称。"); return false;
+        }
+    }
+    if (!exists) { setError("此本机分类已不存在，请重新打开分类设置。"); return false; }
+    QSqlQuery query(m_db);
+    if (id.isEmpty()) {
+        query.prepare("INSERT INTO local_calendars(id,name,color,enabled,sort_order) VALUES(?,?,?,1,(SELECT COALESCE(MAX(sort_order),-1)+1 FROM local_calendars))");
+        query.addBindValue("local:" + QUuid::createUuid().toString(QUuid::WithoutBraces));
+    } else {
+        query.prepare("UPDATE local_calendars SET name=?,color=? WHERE id=?");
+    }
+    query.addBindValue(trimmed); query.addBindValue(QColor(color).name());
+    if (!id.isEmpty()) query.addBindValue(id);
+    if (!query.exec() || query.numRowsAffected() != 1) { setError("无法保存本机分类，请检查数据库权限。"); return false; }
+    reload();
+    return m_error.isEmpty();
+}
+
+bool CalendarStore::deleteCalendar(const QString &id, const QString &targetId)
+{
+    clearError();
+    if (!m_db.transaction()) { setError("无法开始删除本机分类。"); return false; }
+    auto reject = [this](const QString &message) { m_db.rollback(); setError(message); return false; };
+    QSqlQuery query(m_db);
+    if (!query.exec("SELECT id FROM local_calendars")) return reject("无法读取本机分类。");
+    QSet<QString> ids;
+    while (query.next()) ids.insert(query.value(0).toString());
+    if (!ids.contains(id)) return reject("此本机分类已不存在。");
+    if (ids.size() <= 1) return reject("至少需要保留一个本机分类。");
+    query.prepare("SELECT COUNT(*) FROM events WHERE calendar=?"); query.addBindValue(id);
+    if (!query.exec() || !query.next()) return reject("无法读取此分类中的日程。");
+    const bool hasEvents = query.value(0).toInt() > 0;
+    query.finish();
+    if (hasEvents) {
+        if (targetId == id || !ids.contains(targetId)) return reject("请选择另一个本机分类来保留这些日程。");
+        query.prepare("UPDATE events SET calendar=? WHERE calendar=?"); query.addBindValue(targetId); query.addBindValue(id);
+        if (!query.exec()) return reject("无法移动分类中的日程，原分类已保留。");
+    }
+    query.prepare("DELETE FROM local_calendars WHERE id=?"); query.addBindValue(id);
+    if (!query.exec() || query.numRowsAffected() != 1 || !m_db.commit()) return reject("无法删除本机分类，日程和原分类已保留。");
+    reload();
+    return m_error.isEmpty();
+}
+
+QString CalendarStore::eventCalendar(const QString &id) const
+{
+    for (const auto &value : m_events) {
+        const auto event = value.toMap();
+        if (event.value("id").toString() == id) return event.value("calendar").toString();
+    }
+    return {};
 }
 void CalendarStore::setSearchQuery(const QString &query)
 {
@@ -322,7 +416,10 @@ bool CalendarStore::saveEvent(const QVariantMap &event)
                     !QTime::fromString(end, "HH:mm").isValid() || start >= end)) {
         setError("请填写有效的时间，结束时间需晚于开始时间。"); return false;
     }
-    if (calendar != "work" && calendar != "life" && calendar != "ideas") {
+    const bool validCalendar = std::any_of(m_localCalendars.cbegin(), m_localCalendars.cend(), [&calendar](const QVariant &value) {
+        return value.toMap().value("id").toString() == calendar;
+    });
+    if (!validCalendar) {
         setError("请选择一个有效的本机日历。"); return false;
     }
     QString id = event.value("id").toString();

@@ -112,11 +112,19 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.minimumHeight: 0
                 clip: true; contentWidth: availableWidth
+                contentHeight: Math.ceil(releaseNotesText.implicitHeight)
+                rightPadding: releaseNotesBar.visible ? releaseNotesBar.width + 8 : 0
+                bottomPadding: 4
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                 ScrollBar.vertical: SlimScrollBar {
+                    id: releaseNotesBar
                     parent: notesScroll; x: notesScroll.width - width
+                    policy: ScrollBar.AsNeeded
+                    visible: notesScroll.contentHeight > notesScroll.availableHeight + 1
                     y: notesScroll.topPadding; height: notesScroll.availableHeight
                 }
                 Text {
+                    id: releaseNotesText
                     width: notesScroll.availableWidth
                     text: updateChecker.releaseNotes
                     textFormat: Text.PlainText; wrapMode: Text.Wrap

@@ -90,7 +90,27 @@ ApplicationWindow {
                     Text { text: "我的日历"; font.pixelSize: 10; color: Theme.muted }
                     Item { Layout.fillWidth: true }
                     Text { text: String(calendarStore.calendars.length).padStart(2, "0"); font.pixelSize: 10; color: Theme.muted }
+                    ActionButton { iconName: "plus"; quiet: true; hint: "新增本机分类"; implicitWidth: 25; implicitHeight: 25; onClicked: calendarDialog.create() }
                 }
+                ScrollView {
+                    id: calendarScroll
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(calendarList.implicitHeight, Math.max(117, window.height - 720))
+                    contentWidth: availableWidth
+                    contentHeight: Math.ceil(calendarList.implicitHeight)
+                    rightPadding: calendarListBar.visible ? calendarListBar.width + 4 : 0
+                    clip: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    ScrollBar.vertical: SlimScrollBar {
+                        id: calendarListBar
+                        parent: calendarScroll; x: calendarScroll.width - width; height: calendarScroll.availableHeight
+                        policy: ScrollBar.AsNeeded
+                        visible: calendarScroll.contentHeight > calendarScroll.availableHeight + 1
+                    }
+                ColumnLayout {
+                    id: calendarList
+                    width: calendarScroll.availableWidth
+                    spacing: 0
                 Repeater {
                     model: calendarStore.calendars
                     delegate: AbstractButton {
@@ -106,6 +126,15 @@ ApplicationWindow {
                             border.width: calendarToggle.visualFocus ? 1 : 0
                             border.color: Theme.accent
                         }
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.RightButton
+                            enabled: !calendarToggle.modelData.cloud
+                            onClicked: {
+                                calendarMenu.calendar = calendarToggle.modelData
+                                calendarMenu.popup()
+                            }
+                        }
                         contentItem: RowLayout {
                             spacing: 10
                             Rectangle {
@@ -114,11 +143,23 @@ ApplicationWindow {
                                 border.color: modelData.color
                                 Icon { visible: modelData.enabled; anchors.centerIn: parent; width: 11; height: 11; name: "check"; color: "white" }
                             }
-                            Text { text: modelData.name; font.pixelSize: 12; color: modelData.enabled ? Theme.secondary : Theme.muted }
-                            Item { Layout.fillWidth: true }
-                            Text { Layout.rightMargin: 13; text: modelData.count; font.pixelSize: 10; color: Theme.muted }
+                            Text { Layout.fillWidth: true; text: modelData.name; elide: Text.ElideRight; font.pixelSize: 12; color: modelData.enabled ? Theme.secondary : Theme.muted }
+                            Text { text: modelData.count; font.pixelSize: 10; color: Theme.muted }
+                            ActionButton {
+                                id: calendarMore
+                                visible: !calendarToggle.modelData.cloud
+                                implicitWidth: 26; implicitHeight: 27; quiet: true
+                                text: "⋯"; hint: "管理本机分类"
+                                onClicked: {
+                                    calendarMenu.calendar = calendarToggle.modelData
+                                    calendarMenu.popup(calendarMore, width - calendarMenu.width, height + 4)
+                                }
+                            }
+                            Item { visible: !!calendarToggle.modelData.cloud; implicitWidth: 10 }
                         }
                     }
+                }
+                }
                 }
                 Rectangle { Layout.fillWidth: true; Layout.topMargin: 24; height: 1; color: Theme.line }
                 Text { visible: window.height >= 850; Layout.topMargin: 23; Layout.leftMargin: 10; text: calendarStore.monthLabel; font.pixelSize: 11; color: Theme.secondary; font.weight: Font.Medium }
@@ -425,6 +466,157 @@ ApplicationWindow {
 
     ICloudSettings { id: cloudDialog; originWindow: window }
     UpdateSettings { id: updateDialog; originWindow: window }
+
+    SurfaceMenu {
+        id: calendarMenu
+        property var calendar: ({})
+        MenuEntry { text: "编辑分类"; iconName: "note"; onTriggered: calendarDialog.edit(calendarMenu.calendar) }
+        MenuRule { }
+        MenuEntry {
+            text: calendarStore.localCalendars.length > 1 ? "删除分类…" : "至少保留一个本机分类"
+            iconName: "trash"; danger: true; enabled: calendarStore.localCalendars.length > 1
+            onTriggered: deleteCalendarDialog.request(calendarMenu.calendar)
+        }
+    }
+
+    Dialog {
+        id: calendarDialog
+        parent: Overlay.overlay; anchors.centerIn: parent
+        width: 420; padding: 26; modal: true
+        property string calendarId: ""
+        function create() {
+            calendarStore.clearError()
+            calendarId = ""
+            calendarNameField.text = ""
+            calendarColorField.text = "#218572"
+            open()
+            calendarNameField.forceActiveFocus()
+        }
+        function edit(calendar) {
+            calendarStore.clearError()
+            calendarId = calendar.id
+            calendarNameField.text = calendar.name
+            calendarColorField.text = calendar.color
+            open()
+            calendarNameField.forceActiveFocus()
+        }
+        background: Rectangle { radius: 16; color: Theme.surface; border.color: Theme.lineStrong }
+        Overlay.modal: Rectangle { color: Theme.overlay }
+        contentItem: ColumnLayout {
+            spacing: 18
+            RowLayout {
+                Layout.fillWidth: true
+                Rectangle { width: 42; height: 42; radius: 12; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: "calendar"; width: 23; height: 23; color: Theme.accent } }
+                ColumnLayout {
+                    spacing: 5
+                    Text { text: calendarDialog.calendarId.length ? "编辑分类" : "新增本机分类"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
+                    Text { text: "用名称和颜色整理你的日程"; color: Theme.muted; font.pixelSize: 11 }
+                }
+                Item { Layout.fillWidth: true }
+                ActionButton { iconName: "close"; hint: "关闭"; quiet: true; onClicked: calendarDialog.close() }
+            }
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 8
+                Text { text: "名称"; color: Theme.secondary; font.pixelSize: 12 }
+                Field { id: calendarNameField; Layout.fillWidth: true; maximumLength: 30; placeholderText: "例如：学习、家人、旅行" }
+            }
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 12
+                Text { text: "颜色"; color: Theme.secondary; font.pixelSize: 12 }
+                Row {
+                    spacing: 12
+                    Repeater {
+                        model: ["#218572", "#C28B45", "#8273B3", "#4A87B6", "#C16981", "#4C9A70", "#BD7350", "#637B91"]
+                        delegate: AbstractButton {
+                            required property string modelData
+                            width: 30; height: 30
+                            Accessible.name: "选择颜色 " + modelData
+                            onClicked: calendarColorField.text = modelData
+                            background: Rectangle { radius: 10; color: modelData; border.width: parent.visualFocus ? 2 : 0; border.color: Theme.text }
+                            contentItem: Icon { visible: calendarColorField.text.toLowerCase() === modelData.toLowerCase(); name: "check"; color: "white"; width: 17; height: 17 }
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 12
+                    Rectangle { width: 20; height: 20; radius: 6; color: /^#[0-9a-fA-F]{6}$/.test(calendarColorField.text) ? calendarColorField.text : "transparent"; border.color: Theme.lineStrong }
+                    Field { id: calendarColorField; Layout.fillWidth: true; maximumLength: 7; placeholderText: "#RRGGBB" }
+                }
+            }
+            InlineNotice { Layout.fillWidth: true; visible: calendarStore.error.length > 0; text: calendarStore.error; error: true }
+            Text { Layout.fillWidth: true; text: "此分类保存在当前设备。已有日程会同步使用新的名称和颜色。"; color: Theme.muted; font.pixelSize: 11; wrapMode: Text.Wrap; lineHeight: 1.5 }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                ActionButton { text: "取消"; quiet: true; onClicked: calendarDialog.close() }
+                ActionButton {
+                    text: "保存分类"; primary: true; enabled: calendarNameField.text.trim().length > 0
+                    onClicked: if (calendarStore.saveCalendar(calendarDialog.calendarId, calendarNameField.text, calendarColorField.text)) calendarDialog.close()
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: deleteCalendarDialog
+        parent: Overlay.overlay; anchors.centerIn: parent
+        width: 430; padding: 26; modal: true
+        property string calendarId: ""
+        property string calendarName: ""
+        readonly property int eventCount: {
+            const calendar = calendarStore.localCalendars.find(c => c.id === calendarId)
+            return calendar ? calendar.count : 0
+        }
+        property var targets: []
+        function request(calendar) {
+            calendarStore.clearError()
+            calendarId = calendar.id
+            calendarName = calendar.name
+            targets = calendarStore.localCalendars.filter(c => c.id !== calendarId)
+            transferCalendarField.currentIndex = -1
+            open()
+        }
+        background: Rectangle { radius: 16; color: Theme.surface; border.color: Theme.lineStrong }
+        Overlay.modal: Rectangle { color: Theme.overlay }
+        contentItem: ColumnLayout {
+            spacing: 18
+            Rectangle { width: 42; height: 42; radius: 12; color: Theme.dangerSoft; Icon { anchors.centerIn: parent; name: "trash"; width: 22; height: 22; color: Theme.danger } }
+            Text { Layout.fillWidth: true; text: "删除“" + deleteCalendarDialog.calendarName + "”？"; color: Theme.text; font.pixelSize: 20; font.weight: Font.DemiBold; wrapMode: Text.Wrap }
+            Text {
+                Layout.fillWidth: true
+                text: deleteCalendarDialog.eventCount > 0
+                    ? "这个分类中有 " + deleteCalendarDialog.eventCount + " 项日程。先选择另一个本机分类来保留它们，再删除分类。"
+                    : "这个分类中没有日程，可以直接删除。"
+                color: Theme.secondary; font.pixelSize: 12; wrapMode: Text.Wrap; lineHeight: 1.5
+            }
+            ColumnLayout {
+                visible: deleteCalendarDialog.eventCount > 0
+                Layout.fillWidth: true; spacing: 8
+                Text { text: "将日程移到"; color: Theme.secondary; font.pixelSize: 12 }
+                SelectField {
+                    id: transferCalendarField
+                    Layout.fillWidth: true
+                    model: deleteCalendarDialog.targets; textRole: "name"
+                    displayText: currentIndex < 0 ? "选择一个本机分类" : currentText
+                }
+            }
+            InlineNotice { Layout.fillWidth: true; visible: calendarStore.error.length > 0; text: calendarStore.error; error: true }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                ActionButton { text: "取消"; quiet: true; onClicked: deleteCalendarDialog.close() }
+                ActionButton {
+                    text: deleteCalendarDialog.eventCount > 0 ? "移动日程并删除" : "删除分类"
+                    danger: true; primary: true
+                    enabled: calendarStore.localCalendars.length > 1 && (deleteCalendarDialog.eventCount === 0 || transferCalendarField.currentIndex >= 0)
+                    onClicked: {
+                        const target = deleteCalendarDialog.eventCount > 0 ? deleteCalendarDialog.targets[transferCalendarField.currentIndex].id : ""
+                        if (calendarStore.deleteCalendar(deleteCalendarDialog.calendarId, target)) deleteCalendarDialog.close()
+                    }
+                }
+            }
+        }
+    }
 
     Dialog {
         id: desktopUnavailableDialog

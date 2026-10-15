@@ -21,6 +21,7 @@ class CalendarStore final : public QObject
     Q_PROPERTY(bool selectedIsToday READ selectedIsToday NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList monthDays READ monthDays NOTIFY changed)
     Q_PROPERTY(QVariantList calendars READ calendars NOTIFY changed)
+    Q_PROPERTY(QVariantList localCalendars READ localCalendars NOTIFY changed)
     Q_PROPERTY(QVariantList writableCalendars READ writableCalendars NOTIFY changed)
     Q_PROPERTY(QVariantList selectedEvents READ selectedEvents NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList upcomingEvents READ upcomingEvents NOTIFY changed)
@@ -44,6 +45,7 @@ public:
     bool selectedIsToday() const { return m_selected == QDate::currentDate(); }
     QVariantList monthDays() const;
     QVariantList calendars() const;
+    QVariantList localCalendars() const;
     QVariantList writableCalendars() const;
     void attachICloud(ICloudSync *sync);
     QString databasePath() const { return m_db.databaseName(); }
@@ -63,6 +65,9 @@ public:
     Q_INVOKABLE void goToday();
     Q_INVOKABLE void selectDate(const QString &date);
     Q_INVOKABLE void toggleCalendar(const QString &id);
+    Q_INVOKABLE bool saveCalendar(const QString &id, const QString &name, const QString &color);
+    Q_INVOKABLE bool deleteCalendar(const QString &id, const QString &targetId);
+    Q_INVOKABLE QString eventCalendar(const QString &id) const;
     Q_INVOKABLE bool saveEvent(const QVariantMap &event);
     Q_INVOKABLE bool deleteEvent(const QString &id);
     Q_INVOKABLE void clearError();
@@ -79,8 +84,6 @@ private:
     void setError(const QString &message);
     QVariantList eventsOn(const QDate &date) const;
     bool includes(const QVariantMap &event) const;
-    static QString calendarColor(const QString &id);
-    static QString calendarName(const QString &id);
 
     bool m_demo;
     QDate m_month;
@@ -88,7 +91,8 @@ private:
     QSqlDatabase m_db;
     QSettings m_settings;
     QVariantList m_events;
-    QSet<QString> m_enabled {"work", "life", "ideas"};
+    QVariantList m_localCalendars;
+    QSet<QString> m_enabled;
     QString m_search;
     QString m_error;
     ICloudSync *m_icloud = nullptr;
