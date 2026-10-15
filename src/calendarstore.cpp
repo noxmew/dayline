@@ -107,6 +107,12 @@ void CalendarStore::reload()
         events.append(event);
     }
     if (m_icloud) {
+        for (const auto &value : m_icloud->calendars()) {
+            const auto calendar = value.toMap();
+            const QString id = calendar.value("id").toString();
+            if (calendar.value("selected").toBool() && m_settings.value("calendars/visible/" + id, true).toBool())
+                enabled.insert(id);
+        }
         const auto cloudEvents = m_icloud->events(m_month.addMonths(-1), m_month.addMonths(3));
         for (const auto &item : cloudEvents) {
             auto event = item.toMap();
@@ -167,7 +173,7 @@ int CalendarStore::weekCount() const
 
 bool CalendarStore::includes(const QVariantMap &event) const
 {
-    return (event.value("cloud").toBool() || m_enabled.contains(event.value("calendar").toString())) &&
+    return m_enabled.contains(event.value("calendar").toString()) &&
            (m_search.isEmpty() || event.value("title").toString().contains(m_search, Qt::CaseInsensitive) ||
             event.value("notes").toString().contains(m_search, Qt::CaseInsensitive) ||
             event.value("calendarName").toString().contains(m_search, Qt::CaseInsensitive));
@@ -223,6 +229,7 @@ QVariantList CalendarStore::calendars() const
         if (!calendar.value("selected").toBool()) continue;
         int count = 0;
         for (const auto &event : m_events) if (event.toMap().value("calendar") == calendar.value("id")) ++count;
+        calendar["enabled"] = m_enabled.contains(calendar.value("id").toString());
         calendar["count"] = count; result.append(calendar);
     }
     return result;
@@ -300,14 +307,18 @@ void CalendarStore::selectDate(const QString &iso)
 }
 void CalendarStore::toggleCalendar(const QString &id)
 {
+    clearError();
     if (id.startsWith("icloud:") && m_icloud) {
         for (const auto &value : m_icloud->calendars()) {
             const auto calendar = value.toMap();
-            if (calendar.value("id").toString() == id) m_icloud->selectCalendar(id, !calendar.value("selected").toBool());
+            if (calendar.value("id").toString() != id || !calendar.value("selected").toBool()) continue;
+            m_settings.setValue("calendars/visible/" + id, !m_enabled.contains(id));
+            reload();
+            return;
         }
+        setError("此 iCloud 日历已不在当前过滤列表中。");
         return;
     }
-    clearError();
     QSqlQuery query(m_db);
     query.prepare("UPDATE local_calendars SET enabled=1-enabled WHERE id=?"); query.addBindValue(id);
     if (!query.exec() || query.numRowsAffected() != 1) { setError("无法更改本机日历的显示状态。"); return; }

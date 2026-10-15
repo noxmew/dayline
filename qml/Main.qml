@@ -87,15 +87,18 @@ ApplicationWindow {
 
                 RowLayout {
                     Layout.topMargin: 31; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 9
+                    Layout.minimumHeight: 25
                     Text { text: "我的日历"; font.pixelSize: 10; color: Theme.muted }
                     Item { Layout.fillWidth: true }
                     Text { text: String(calendarStore.calendars.length).padStart(2, "0"); font.pixelSize: 10; color: Theme.muted }
-                    ActionButton { iconName: "plus"; quiet: true; hint: "新增本机分类"; implicitWidth: 25; implicitHeight: 25; onClicked: calendarDialog.create() }
                 }
                 ScrollView {
                     id: calendarScroll
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(calendarList.implicitHeight, Math.max(117, window.height - 720))
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: Math.min(calendarList.implicitHeight, 117)
+                    Layout.preferredHeight: calendarList.implicitHeight
+                    Layout.maximumHeight: calendarList.implicitHeight
                     contentWidth: availableWidth
                     contentHeight: Math.ceil(calendarList.implicitHeight)
                     rightPadding: calendarListBar.visible ? calendarListBar.width + 4 : 0
@@ -118,22 +121,13 @@ ApplicationWindow {
                         required property var modelData
                         Layout.fillWidth: true; Layout.topMargin: 6
                         implicitHeight: 33; hoverEnabled: true
-                        Accessible.name: modelData.name + "日历"
+                        Accessible.name: modelData.name + (modelData.cloud ? " · iCloud 日历" : "日历")
                         onClicked: calendarStore.toggleCalendar(modelData.id)
                         background: Rectangle {
                             radius: 7
                             color: calendarToggle.hovered ? Theme.hover : "transparent"
                             border.width: calendarToggle.visualFocus ? 1 : 0
                             border.color: Theme.accent
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.RightButton
-                            enabled: !calendarToggle.modelData.cloud
-                            onClicked: {
-                                calendarMenu.calendar = calendarToggle.modelData
-                                calendarMenu.popup()
-                            }
                         }
                         contentItem: RowLayout {
                             spacing: 10
@@ -144,18 +138,8 @@ ApplicationWindow {
                                 Icon { visible: modelData.enabled; anchors.centerIn: parent; width: 11; height: 11; name: "check"; color: "white" }
                             }
                             Text { Layout.fillWidth: true; text: modelData.name; elide: Text.ElideRight; font.pixelSize: 12; color: modelData.enabled ? Theme.secondary : Theme.muted }
-                            Text { text: modelData.count; font.pixelSize: 10; color: Theme.muted }
-                            ActionButton {
-                                id: calendarMore
-                                visible: !calendarToggle.modelData.cloud
-                                implicitWidth: 26; implicitHeight: 27; quiet: true
-                                text: "⋯"; hint: "管理本机分类"
-                                onClicked: {
-                                    calendarMenu.calendar = calendarToggle.modelData
-                                    calendarMenu.popup(calendarMore, width - calendarMenu.width, height + 4)
-                                }
-                            }
-                            Item { visible: !!calendarToggle.modelData.cloud; implicitWidth: 10 }
+                            Icon { visible: !!modelData.cloud; name: "cloud"; width: 13; height: 13; color: Theme.muted }
+                            Text { Layout.rightMargin: 9; text: modelData.count; font.pixelSize: 10; color: Theme.muted }
                         }
                     }
                 }
@@ -191,29 +175,6 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.fillHeight: true; Layout.minimumHeight: 24 }
-                Rectangle {
-                    Layout.fillWidth: true; implicitHeight: 118
-                    radius: 12; color: Theme.surface; border.color: Theme.line
-                    Column {
-                        anchors.fill: parent; anchors.margins: 15; spacing: 9
-                        Row {
-                            spacing: 8
-                            Icon { name: "cloud"; width: 18; height: 18; color: Theme.accent }
-                            Text { text: "iCloud"; color: Theme.text; font.pixelSize: 12; font.weight: Font.Medium }
-                        }
-                        Text { text: iCloudSync.status; color: Theme.muted; font.pixelSize: 10; width: parent.width; elide: Text.ElideRight }
-                        AbstractButton {
-                            width: parent.width; height: 20
-                            Accessible.name: "查看 iCloud 同步状态"
-                            onClicked: cloudDialog.open()
-                            contentItem: Row {
-                                spacing: 7
-                                Text { text: iCloudSync.connected ? "账户与同步" : "连接 iCloud"; color: Theme.accent; font.pixelSize: 10 }
-                                Icon { name: "arrow"; width: 14; height: 14; color: Theme.accent }
-                            }
-                        }
-                    }
-                }
                 RowLayout {
                     Layout.topMargin: 18; Layout.fillWidth: true
                     ActionButton { iconName: "settings"; text: "偏好设置"; quiet: true; onClicked: settingsDialog.open() }
@@ -449,18 +410,6 @@ ApplicationWindow {
     ICloudSettings { id: cloudDialog; originWindow: window }
     UpdateSettings { id: updateDialog; originWindow: window }
 
-    SurfaceMenu {
-        id: calendarMenu
-        property var calendar: ({})
-        MenuEntry { text: "编辑分类"; iconName: "note"; onTriggered: calendarDialog.edit(calendarMenu.calendar) }
-        MenuRule { }
-        MenuEntry {
-            text: calendarStore.localCalendars.length > 1 ? "删除分类…" : "至少保留一个本机分类"
-            iconName: "trash"; danger: true; enabled: calendarStore.localCalendars.length > 1
-            onTriggered: deleteCalendarDialog.request(calendarMenu.calendar)
-        }
-    }
-
     Dialog {
         id: calendarDialog
         parent: Overlay.overlay; anchors.centerIn: parent
@@ -622,37 +571,121 @@ ApplicationWindow {
         id: settingsDialog
         parent: Overlay.overlay; anchors.centerIn: parent
         width: 470; padding: 28; modal: true
+        height: Math.min(implicitHeight, parent.height - 48)
         background: Rectangle { color: Theme.surface; radius: 18; border.color: Theme.lineStrong }
         Overlay.modal: Rectangle { color: Theme.overlay }
-        contentItem: ColumnLayout {
-            spacing: 20
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
-                Rectangle { width: 42; height: 42; radius: 12; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: "settings"; width: 22; height: 22; color: Theme.accent } }
-                Text { text: "偏好设置"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
-                Item { Layout.fillWidth: true }
-                ActionButton { iconName: "close"; hint: "关闭"; quiet: true; onClicked: settingsDialog.close() }
+        SurfaceMenu {
+            id: calendarMenu
+            property var calendar: ({})
+            MenuEntry { text: "编辑分类"; iconName: "note"; onTriggered: calendarDialog.edit(calendarMenu.calendar) }
+            MenuRule { }
+            MenuEntry {
+                text: calendarStore.localCalendars.length > 1 ? "删除分类…" : "至少保留一个本机分类"
+                iconName: "trash"; danger: true; enabled: calendarStore.localCalendars.length > 1
+                onTriggered: deleteCalendarDialog.request(calendarMenu.calendar)
             }
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 60
-                radius: 12; color: Theme.input; border.color: Theme.line
+        }
+        contentItem: ScrollView {
+            id: settingsScroll
+            implicitHeight: settingsContent.implicitHeight
+            contentWidth: availableWidth
+            contentHeight: Math.ceil(settingsContent.implicitHeight)
+            rightPadding: settingsBar.visible ? settingsBar.width + 8 : 0
+            clip: true
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical: SlimScrollBar {
+                id: settingsBar
+                parent: settingsScroll; x: settingsScroll.width - width; height: settingsScroll.availableHeight
+                policy: ScrollBar.AsNeeded
+                visible: settingsScroll.contentHeight > settingsScroll.availableHeight + 1
+            }
+            ColumnLayout {
+                id: settingsContent
+                width: settingsScroll.availableWidth
+                spacing: 20
                 RowLayout {
-                    anchors.fill: parent; anchors.margins: 16
-                    Text { text: "深色外观"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
+                    Layout.fillWidth: true
+                    spacing: 12
+                    Rectangle { width: 42; height: 42; radius: 12; color: Theme.accentSoft; Icon { anchors.centerIn: parent; name: "settings"; width: 22; height: 22; color: Theme.accent } }
+                    Text { text: "偏好设置"; color: Theme.text; font.pixelSize: 21; font.weight: Font.DemiBold }
                     Item { Layout.fillWidth: true }
-                    Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked; Accessible.name: "深色外观" }
+                    ActionButton { iconName: "close"; hint: "关闭"; quiet: true; onClicked: settingsDialog.close() }
                 }
-            }
-            ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }
-            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
-            ActionButton { text: "检查更新"; iconName: "refresh"; onClicked: { settingsDialog.close(); window.openUpdates() } }
-            RowLayout {
-                Layout.fillWidth: true
-                Text { text: "日笺 · Dayline"; color: Theme.secondary; font.pixelSize: 11 }
-                Item { Layout.fillWidth: true }
-                Text { text: Qt.application.version; color: Theme.muted; font.pixelSize: 10 }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 60
+                    radius: 12; color: Theme.input; border.color: Theme.line
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 16
+                        Text { text: "深色外观"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
+                        Item { Layout.fillWidth: true }
+                        Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked; Accessible.name: "深色外观" }
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true; spacing: 10
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "本机日历"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
+                        Item { Layout.fillWidth: true }
+                        ActionButton { text: "新增分类"; iconName: "plus"; quiet: true; implicitHeight: 32; onClicked: calendarDialog.create() }
+                    }
+                    ScrollView {
+                        id: settingsCalendarScroll
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(settingsCalendarList.implicitHeight, 168)
+                        contentWidth: availableWidth
+                        contentHeight: Math.ceil(settingsCalendarList.implicitHeight)
+                        rightPadding: settingsCalendarBar.visible ? settingsCalendarBar.width + 4 : 0
+                        clip: true
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        ScrollBar.vertical: SlimScrollBar {
+                            id: settingsCalendarBar
+                            parent: settingsCalendarScroll; x: settingsCalendarScroll.width - width; height: settingsCalendarScroll.availableHeight
+                            policy: ScrollBar.AsNeeded
+                            visible: settingsCalendarScroll.contentHeight > settingsCalendarScroll.availableHeight + 1
+                        }
+                        ColumnLayout {
+                            id: settingsCalendarList
+                            width: settingsCalendarScroll.availableWidth
+                            spacing: 4
+                            Repeater {
+                                model: calendarStore.localCalendars
+                                delegate: Rectangle {
+                                    id: settingsCalendarRow
+                                    required property var modelData
+                                    Layout.fillWidth: true; implicitHeight: 42
+                                    radius: 9; color: Theme.input; border.color: Theme.line
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 8; spacing: 10
+                                        Rectangle { width: 14; height: 14; radius: 4; color: settingsCalendarRow.modelData.color }
+                                        Text { Layout.fillWidth: true; text: settingsCalendarRow.modelData.name; elide: Text.ElideRight; font.pixelSize: 12; color: Theme.text }
+                                        Text { text: settingsCalendarRow.modelData.count; font.pixelSize: 10; color: Theme.muted }
+                                        ActionButton {
+                                            id: settingsCalendarMore
+                                            implicitWidth: 28; implicitHeight: 28; quiet: true
+                                            text: "⋯"; hint: "管理本机分类"
+                                            Accessible.name: "管理“" + settingsCalendarRow.modelData.name + "”分类"
+                                            onClicked: {
+                                                calendarMenu.calendar = settingsCalendarRow.modelData
+                                                calendarMenu.popup(settingsCalendarMore, width - calendarMenu.width, height + 4)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }
+                Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
+                ActionButton { text: "检查更新"; iconName: "refresh"; onClicked: { settingsDialog.close(); window.openUpdates() } }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "日笺 · Dayline"; color: Theme.secondary; font.pixelSize: 11 }
+                    Item { Layout.fillWidth: true }
+                    Text { text: Qt.application.version; color: Theme.muted; font.pixelSize: 10 }
+                }
             }
         }
     }

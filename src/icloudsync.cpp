@@ -147,7 +147,7 @@ void ICloudSync::loadAccount()
     QSqlQuery q(m_db); q.exec("SELECT username,region,home,default_calendar FROM icloud_account WHERE id=1");
     m_connected = q.next();
     if (m_connected) { m_user = q.value(0).toString(); m_region = q.value(1).toString(); m_home = q.value(2).toString(); m_default = q.value(3).toString(); m_status = "等待同步"; }
-    else { m_user.clear(); m_region = "global"; m_home.clear(); m_default.clear(); m_status = "尚未连接"; }
+    else { m_user.clear(); m_region = "china"; m_home.clear(); m_default.clear(); m_status = "尚未连接"; }
 }
 QString ICloudSync::lastSync() const
 {
@@ -261,7 +261,7 @@ void ICloudSync::connectAccount(const QString &account, const QString &password,
     if (m_busy) return;
     const QString user = account.trimmed();
     if (!user.contains('@') || password.trimmed().isEmpty() || (region != "global" && region != "china")) {
-        fail("请输入 Apple 账户、App 专用密码并选择账户地区。"); return;
+        fail("请输入有效的 Apple 账户和 App 专用密码。"); return;
     }
     if (m_connected && (user.compare(m_user, Qt::CaseInsensitive) || region != m_region)) { fail("请先处理待同步内容并断开当前账户，再连接其他账户或地区。"); return; }
     m_user = user; m_password = password.trimmed().toUtf8(); m_region = region; m_authRequired = false;

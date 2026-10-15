@@ -85,7 +85,7 @@ private:
     SecretStore m_secrets;
     QTimer m_poll, m_retry;
     QByteArray m_password;
-    QString m_user, m_region = "global", m_home, m_default, m_status = "尚未连接", m_error;
+    QString m_user, m_region = "china", m_home, m_default, m_status = "尚未连接", m_error;
     bool m_connected = false, m_busy = false, m_authRequired = false;
     int m_failures = 0;
 };

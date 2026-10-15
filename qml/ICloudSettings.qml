@@ -15,18 +15,36 @@ ApplicationWindow {
     minimumHeight: Math.min(560, Math.max(420, Screen.desktopAvailableHeight - 80))
     property bool passwordVisible: false
     property bool browserOpenFailed: false
+    property bool editingAuthorization: false
+    property bool submittingAuthorization: false
+    readonly property bool showAccountForm: !iCloudSync.connected || editingAuthorization
     visible: false
     color: Theme.surface
     transientParent: null
     function open() {
         accountField.text = iCloudSync.account
-        regionField.currentIndex = iCloudSync.region === "china" ? 1 : 0
+        editingAuthorization = false
+        browserOpenFailed = false
+        passwordVisible = false
+        passwordField.clear()
         height = Math.min(iCloudSync.connected ? 760 : 560,
                           Math.max(minimumHeight, Screen.desktopAvailableHeight - 80))
         WindowPlacement.center(window, originWindow)
         show(); raise(); requestActivate()
     }
     Shortcut { sequence: "Escape"; onActivated: window.close() }
+    Connections {
+        target: iCloudSync
+        function onChanged() {
+            if (!window.submittingAuthorization || iCloudSync.busy) return
+            window.submittingAuthorization = false
+            if (iCloudSync.connected && iCloudSync.error.length === 0) {
+                window.editingAuthorization = false
+                window.browserOpenFailed = false
+                window.passwordVisible = false
+            }
+        }
+    }
     ScrollView {
         id: accountScroll
         anchors.fill: parent
@@ -61,18 +79,21 @@ ApplicationWindow {
                     spacing: 5
                     Text { text: "iCloud"; color: Theme.text; font.pixelSize: 22; font.weight: Font.DemiBold }
                     Text { Layout.fillWidth: true; text: iCloudSync.status; color: Theme.secondary; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { visible: iCloudSync.connected; Layout.fillWidth: true; text: iCloudSync.account; color: Theme.muted; font.pixelSize: 11; elide: Text.ElideRight }
                 }
             }
             Text {
                 Layout.fillWidth: true
+                visible: window.showAccountForm
                 text: "为 Apple 账户开启双重认证后，生成 <a style='color:" + Theme.accent + "; text-decoration:none' href='https://account.apple.com/account/manage'>App 专用密码 ↗</a>。请勿使用账户登录密码。"
                 textFormat: Text.RichText; wrapMode: Text.Wrap; color: Theme.secondary; linkColor: Theme.accent; font.pixelSize: 12; lineHeight: 1.5
                 onLinkActivated: link => window.browserOpenFailed = !Qt.openUrlExternally(link)
                 HoverHandler { cursorShape: parent.hoveredLink.length ? Qt.PointingHandCursor : Qt.ArrowCursor }
             }
-            InlineNotice { Layout.fillWidth: true; visible: window.browserOpenFailed; error: true; text: "无法启动系统默认浏览器，请检查默认浏览器设置后重试。" }
+            InlineNotice { Layout.fillWidth: true; visible: window.showAccountForm && window.browserOpenFailed; error: true; text: "无法启动系统默认浏览器，请检查默认浏览器设置后重试。" }
             Rectangle {
                 Layout.fillWidth: true
+                visible: window.showAccountForm
                 implicitHeight: accountForm.implicitHeight + 32
                 radius: 12; color: Theme.input; border.color: Theme.line
             ColumnLayout {
@@ -80,8 +101,6 @@ ApplicationWindow {
                 anchors.fill: parent; anchors.margins: 16; spacing: 10
                 Text { text: "Apple 账户"; color: Theme.secondary; font.pixelSize: 12 }
                 Field { id: accountField; Layout.fillWidth: true; placeholderText: "name@example.com"; enabled: !iCloudSync.busy && !iCloudSync.connected; inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText }
-                Text { text: "账户地区"; color: Theme.secondary; font.pixelSize: 12 }
-                SelectField { id: regionField; Layout.fillWidth: true; model: ["其他国家或地区", "中国大陆（云上贵州）"]; enabled: !iCloudSync.busy && !iCloudSync.connected }
                 Text { text: "App 专用密码"; color: Theme.secondary; font.pixelSize: 12 }
                 Field {
                     id: passwordField
@@ -101,12 +120,16 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     Item { Layout.fillWidth: true }
+                    ActionButton { visible: iCloudSync.connected; text: "取消"; quiet: true; enabled: !iCloudSync.busy; onClicked: { window.editingAuthorization = false; passwordField.clear(); window.passwordVisible = false } }
                     ActionButton {
                         text: iCloudSync.busy ? "正在连接…" : iCloudSync.connected ? "重新授权" : "连接 iCloud"
                         primary: true; enabled: !iCloudSync.busy && passwordField.text.length > 0
                         onClicked: {
-                            iCloudSync.connectAccount(accountField.text, passwordField.text, regionField.currentIndex === 1 ? "china" : "global")
+                            window.submittingAuthorization = true
+                            iCloudSync.connectAccount(accountField.text, passwordField.text,
+                                                      iCloudSync.connected ? iCloudSync.region : "china")
                             passwordField.clear()
+                            window.passwordVisible = false
                         }
                     }
                 }
@@ -193,7 +216,24 @@ ApplicationWindow {
                     }
                 }
             }
-            ActionButton { visible: iCloudSync.connected; text: "断开 iCloud 账户…"; quiet: true; danger: true; enabled: !iCloudSync.busy; onClicked: disconnectDialog.open() }
+            RowLayout {
+                visible: iCloudSync.connected
+                Layout.fillWidth: true
+                ActionButton {
+                    text: "更新授权"; quiet: true
+                    visible: !window.editingAuthorization; enabled: !iCloudSync.busy
+                    onClicked: {
+                        window.browserOpenFailed = false
+                        window.editingAuthorization = true
+                        Qt.callLater(() => {
+                            accountBar.position = 0
+                            passwordField.forceActiveFocus()
+                        })
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                ActionButton { text: "断开 iCloud 账户…"; quiet: true; danger: true; enabled: !iCloudSync.busy; onClicked: disconnectDialog.open() }
+            }
             Item { implicitHeight: 10 }
         }
     }
