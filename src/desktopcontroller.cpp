@@ -3,6 +3,7 @@
 #include <QGuiApplication>
 #include <QCursor>
 #include <QDBusInterface>
+#include <QDBusConnectionInterface>
 #include <QDBusReply>
 #include <QDBusServiceWatcher>
 #include <QList>
@@ -76,6 +77,11 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
     const bool wayland = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland" || !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
     const auto desktops = qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(':', Qt::SkipEmptyParts);
     m_ddeSession = !wayland && desktops.contains("DDE", Qt::CaseInsensitive);
+    const auto sessionBus = QDBusConnection::sessionBus();
+    const bool ddeWaylandRegistered = wayland && sessionBus.interface()
+        && sessionBus.interface()->isServiceRegistered("com.deepin.daemon.KWayland").value();
+    m_ddeWaylandSession = wayland && (desktops.contains("DDE", Qt::CaseInsensitive)
+        || ddeWaylandRegistered);
     const auto root = xcb_setup_roots_iterator(xcb_get_setup(conn)).data->root;
     m_rootWindow = root;
     auto *reply = xcb_get_property_reply(conn,
@@ -111,6 +117,18 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
             QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
         connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, [this] { updateSupport(); });
         connect(watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this] { updateSupport(); });
+    }
+    if (m_ddeWaylandSession) {
+        auto bus = QDBusConnection::sessionBus();
+        const QString service = "com.deepin.daemon.KWayland";
+        const QString path = "/com/deepin/daemon/KWayland/WindowManager";
+        const QString interface = "com.deepin.daemon.KWayland.WindowManager";
+        QDBusInterface manager(service, path, interface, bus);
+        const bool activeConnected = bus.connect(service, path, interface, "ActiveWindowChanged",
+            this, SLOT(raiseDdeWaylandDesktop()));
+        const bool showingConnected = bus.connect(service, path, interface, "ShowingDesktopChanged",
+            this, SLOT(raiseDdeWaylandDesktop()));
+        m_protocolSupported = m_protocolSupported && manager.isValid() && activeConnected && showingConnected;
     }
     updateSupport();
     m_saveTimer.setSingleShot(true);
@@ -167,7 +185,8 @@ void DesktopController::updateSupport()
 {
     m_supported = m_protocolSupported;
     if (!m_protocolSupported) {
-        m_supportMessage = "当前窗口管理器未提供日笺需要的 X11 桌面窗口协议。";
+        m_supportMessage = m_ddeWaylandSession ? "DDE Wayland 桌面服务未就绪，无法保持桌面月历的层级。"
+            : "当前窗口管理器未提供日笺需要的 X11 桌面窗口协议。";
     } else if (m_needsGnomeBridge) {
         QDBusInterface bridge("org.dayline.DesktopBridge", "/org/dayline/DesktopBridge", "org.dayline.DesktopBridge");
         bridge.setTimeout(1500);
@@ -178,6 +197,8 @@ void DesktopController::updateSupport()
     } else if (m_ddeSession) {
         m_supportMessage = m_ddeDesktopWindow ? "已连接 DDE 桌面，月历保持在普通窗口下方。"
             : "DDE 桌面窗口尚未就绪，请稍后再试。";
+    } else if (m_ddeWaylandSession) {
+        m_supportMessage = "已连接 DDE Wayland 桌面服务，月历保持在普通窗口下方。";
     } else {
         m_supportMessage = "使用 X11 桌面窗口协议；UOS DDE 的层级和交互需在实机确认。";
     }
@@ -242,6 +263,14 @@ void DesktopController::applyDdeDesktopParent()
     xcb_flush(conn);
 }
 
+void DesktopController::raiseDdeWaylandDesktop()
+{
+    // DDE raises its native wallpaper when the desktop is activated. Keep the
+    // XWayland calendar above it within the desktop layer, below normal windows.
+    if (m_ddeWaylandSession && m_enabled && m_desktop)
+        m_desktop->raise();
+}
+
 void DesktopController::updateDdeDesktopWindow()
 {
     auto *conn = connection();
@@ -298,6 +327,7 @@ void DesktopController::setEnabled(bool enabled)
         m_desktop->show();
         // Qt clears WM_TRANSIENT_FOR when showing a Qt.Window; restore the DDE association afterwards.
         applyDdeDesktopParent();
+        raiseDdeWaylandDesktop();
     } else {
         saveGeometry();
         openManager();

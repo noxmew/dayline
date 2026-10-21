@@ -52,6 +52,9 @@ signals:
     void preparingDesktopChanged();
     void desktopActivationFailed();
 
+private slots:
+    void raiseDdeWaylandDesktop();
+
 private:
     void constrainGeometry();
     QRect constrainedGeometry(QRect rect) const;
@@ -72,6 +75,7 @@ private:
     bool m_protocolSupported = false;
     bool m_needsGnomeBridge = false;
     bool m_ddeSession = false;
+    bool m_ddeWaylandSession = false;
     quint32 m_rootWindow = 0;
     quint32 m_clientListAtom = 0;
     quint32 m_ddeDesktopWindow = 0;
