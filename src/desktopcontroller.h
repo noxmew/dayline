@@ -52,15 +52,13 @@ signals:
     void preparingDesktopChanged();
     void desktopActivationFailed();
 
-private slots:
-    void raiseDdeWaylandDesktop();
-
 private:
     void constrainGeometry();
     QRect constrainedGeometry(QRect rect) const;
     void saveGeometry();
     void applyDesktopHints();
     void applyDdeDesktopParent();
+    void raiseDdeWaylandDesktop();
     void updateDdeDesktopWindow();
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
     void updateSupport();

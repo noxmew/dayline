@@ -99,14 +99,14 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
     std::free(reply);
     m_protocolSupported = m_supported;
     m_needsGnomeBridge = wayland && qEnvironmentVariable("XDG_CURRENT_DESKTOP").contains("GNOME", Qt::CaseInsensitive);
-    if (m_ddeSession && m_protocolSupported) {
-        m_clientListAtom = atom(conn, "_NET_CLIENT_LIST");
+    if ((m_ddeSession || m_ddeWaylandSession) && m_protocolSupported) {
+        m_clientListAtom = atom(conn, m_ddeSession ? "_NET_CLIENT_LIST" : "_NET_CLIENT_LIST_STACKING");
         auto *attributes = xcb_get_window_attributes_reply(conn, xcb_get_window_attributes(conn, root), nullptr);
         if (attributes) {
             const uint32_t events = attributes->your_event_mask | XCB_EVENT_MASK_PROPERTY_CHANGE;
             xcb_change_window_attributes(conn, root, XCB_CW_EVENT_MASK, &events);
             qGuiApp->installNativeEventFilter(this);
-            updateDdeDesktopWindow();
+            if (m_ddeSession) updateDdeDesktopWindow();
         } else {
             m_protocolSupported = false;
         }
@@ -117,18 +117,6 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
             QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
         connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, [this] { updateSupport(); });
         connect(watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this] { updateSupport(); });
-    }
-    if (m_ddeWaylandSession) {
-        auto bus = QDBusConnection::sessionBus();
-        const QString service = "com.deepin.daemon.KWayland";
-        const QString path = "/com/deepin/daemon/KWayland/WindowManager";
-        const QString interface = "com.deepin.daemon.KWayland.WindowManager";
-        QDBusInterface manager(service, path, interface, bus);
-        const bool activeConnected = bus.connect(service, path, interface, "ActiveWindowChanged",
-            this, SLOT(raiseDdeWaylandDesktop()));
-        const bool showingConnected = bus.connect(service, path, interface, "ShowingDesktopChanged",
-            this, SLOT(raiseDdeWaylandDesktop()));
-        m_protocolSupported = m_protocolSupported && manager.isValid() && activeConnected && showingConnected;
     }
     updateSupport();
     m_saveTimer.setSingleShot(true);
@@ -144,7 +132,7 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
 
 DesktopController::~DesktopController()
 {
-    if (m_ddeSession) qGuiApp->removeNativeEventFilter(this);
+    if (m_ddeSession || m_ddeWaylandSession) qGuiApp->removeNativeEventFilter(this);
 }
 
 void DesktopController::attach(QQuickWindow *manager, QQuickWindow *desktop)
@@ -185,8 +173,7 @@ void DesktopController::updateSupport()
 {
     m_supported = m_protocolSupported;
     if (!m_protocolSupported) {
-        m_supportMessage = m_ddeWaylandSession ? "DDE Wayland 桌面服务未就绪，无法保持桌面月历的层级。"
-            : "当前窗口管理器未提供日笺需要的 X11 桌面窗口协议。";
+        m_supportMessage = "当前窗口管理器未提供日笺需要的 X11 桌面窗口协议。";
     } else if (m_needsGnomeBridge) {
         QDBusInterface bridge("org.dayline.DesktopBridge", "/org/dayline/DesktopBridge", "org.dayline.DesktopBridge");
         bridge.setTimeout(1500);
@@ -198,7 +185,7 @@ void DesktopController::updateSupport()
         m_supportMessage = m_ddeDesktopWindow ? "已连接 DDE 桌面，月历保持在普通窗口下方。"
             : "DDE 桌面窗口尚未就绪，请稍后再试。";
     } else if (m_ddeWaylandSession) {
-        m_supportMessage = "已连接 DDE Wayland 桌面服务，月历保持在普通窗口下方。";
+        m_supportMessage = "已启用 DDE Wayland 桌面层级维护，月历保持在普通窗口下方。";
     } else {
         m_supportMessage = "使用 X11 桌面窗口协议；UOS DDE 的层级和交互需在实机确认。";
     }
@@ -235,7 +222,13 @@ void DesktopController::applyDesktopHints()
 {
     auto *conn = connection();
     const auto id = m_desktop->winId();
-    const xcb_atom_t type = atom(conn, m_ddeSession ? "_NET_WM_WINDOW_TYPE_NORMAL" : "_NET_WM_WINDOW_TYPE_DESKTOP");
+    // KWin discards the alpha channel when it first manages a desktop window.
+    // On DDE Wayland, preserve the ARGB visual by assigning the desktop role
+    // only after the window appears in the managed client list.
+    const bool managed = !m_ddeWaylandSession
+        || windowProperty(conn, m_rootWindow, m_clientListAtom, XCB_ATOM_WINDOW).contains(id);
+    const xcb_atom_t type = atom(conn, m_ddeSession || !managed
+        ? "_NET_WM_WINDOW_TYPE_NORMAL" : "_NET_WM_WINDOW_TYPE_DESKTOP");
     const QByteArray role("dayline-desktop");
     xcb_change_property(conn, XCB_PROP_MODE_REPLACE, id, atom(conn, "WM_WINDOW_ROLE"), XCB_ATOM_STRING, 8, role.size(), role.constData());
     xcb_change_property(conn, XCB_PROP_MODE_REPLACE, id, atom(conn, "_NET_WM_WINDOW_TYPE"), XCB_ATOM_ATOM, 32, 1, &type);
@@ -267,8 +260,37 @@ void DesktopController::raiseDdeWaylandDesktop()
 {
     // DDE raises its native wallpaper when the desktop is activated. Keep the
     // XWayland calendar above it within the desktop layer, below normal windows.
-    if (m_ddeWaylandSession && m_enabled && m_desktop)
-        m_desktop->raise();
+    if (!m_ddeWaylandSession || !m_enabled || !m_desktop) return;
+    auto *conn = connection();
+    const auto clients = windowProperty(conn, m_rootWindow, m_clientListAtom, XCB_ATOM_WINDOW);
+    const auto id = m_desktop->winId();
+    if (!clients.contains(id)) return;
+    const auto typeProperty = atom(conn, "_NET_WM_WINDOW_TYPE");
+    const auto desktopType = atom(conn, "_NET_WM_WINDOW_TYPE_DESKTOP");
+    if (!windowProperty(conn, id, typeProperty, XCB_ATOM_ATOM).contains(desktopType)) {
+        xcb_change_property(conn, XCB_PROP_MODE_REPLACE, id, typeProperty, XCB_ATOM_ATOM, 32, 1, &desktopType);
+        // Refresh KWin's cached layer after changing the managed window type.
+        xcb_client_message_event_t state{};
+        state.response_type = XCB_CLIENT_MESSAGE;
+        state.format = 32;
+        state.window = id;
+        state.type = atom(conn, "_NET_WM_STATE");
+        state.data.data32[1] = atom(conn, "_NET_WM_STATE_BELOW");
+        state.data.data32[3] = 1;
+        for (uint32_t action : {0u, 1u}) {
+            state.data.data32[0] = action;
+            xcb_send_event(conn, false, m_rootWindow,
+                XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
+                reinterpret_cast<const char *>(&state));
+        }
+    }
+    // Let only the topmost X11 desktop raise itself, so multiple calendars
+    // cannot keep raising one another in response to stacking notifications.
+    for (auto it = clients.crbegin(); it != clients.crend(); ++it) {
+        if (*it == m_desktop->winId()) break;
+        if (windowProperty(conn, *it, typeProperty, XCB_ATOM_ATOM).contains(desktopType)) return;
+    }
+    m_desktop->raise();
 }
 
 void DesktopController::updateDdeDesktopWindow()
@@ -295,8 +317,10 @@ bool DesktopController::nativeEventFilter(const QByteArray &eventType, void *mes
     const auto *event = static_cast<xcb_generic_event_t *>(message);
     if ((event->response_type & 0x7f) != XCB_PROPERTY_NOTIFY) return false;
     const auto *property = reinterpret_cast<const xcb_property_notify_event_t *>(event);
-    if (property->window == m_rootWindow && property->atom == m_clientListAtom)
-        updateDdeDesktopWindow();
+    if (property->window == m_rootWindow && property->atom == m_clientListAtom) {
+        if (m_ddeWaylandSession) raiseDdeWaylandDesktop();
+        else updateDdeDesktopWindow();
+    }
     return false;
 }
 
