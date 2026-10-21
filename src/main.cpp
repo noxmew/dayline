@@ -16,8 +16,9 @@
 
 int main(int argc, char *argv[])
 {
-    // The desktop integration uses EWMH through X11, including XWayland sessions.
-    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM") && !qEnvironmentVariableIsEmpty("DISPLAY"))
+    // Desktop integration requires X11, including XWayland on Wayland desktops.
+    // The desktop may export QT_QPA_PLATFORM=wayland, so select XCB explicitly.
+    if (!qEnvironmentVariableIsEmpty("DISPLAY"))
         qputenv("QT_QPA_PLATFORM", "xcb");
     QGuiApplication app(argc, argv);
     app.setOrganizationName("Dayline");
