@@ -20,6 +20,11 @@ int main(int argc, char *argv[])
     // The desktop may export QT_QPA_PLATFORM=wayland, so select XCB explicitly.
     if (!qEnvironmentVariableIsEmpty("DISPLAY"))
         qputenv("QT_QPA_PLATFORM", "xcb");
+#if defined(Q_OS_LINUX) && defined(Q_PROCESSOR_ARM_64)
+    // The calendar's flat UI does not need vendor EGL implementations on ARM.
+    QQuickWindow::setSceneGraphBackend(QStringLiteral("software"));
+    qputenv("QT_XCB_GL_INTEGRATION", "none");
+#endif
     QGuiApplication app(argc, argv);
     app.setOrganizationName("Dayline");
     app.setApplicationName("Dayline");

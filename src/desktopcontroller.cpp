@@ -58,7 +58,9 @@ bool isDdeDesktop(xcb_connection_t *conn, xcb_window_t window)
         const QByteArray value(static_cast<const char *>(xcb_get_property_value(reply)),
                                xcb_get_property_value_length(reply));
         const auto names = value.split('\0');
-        matches = names.size() >= 2 && names[0] == "dde-shell/desktop" && names[1] == "org.deepin.dde-shell";
+        matches = names.size() >= 2
+            && ((names[0] == "dde-shell/desktop" && names[1] == "org.deepin.dde-shell")
+                || (names[0] == "dde-desktop" && names[1] == "dde-desktop"));
     }
     std::free(reply);
     return matches;
@@ -75,13 +77,16 @@ DesktopController::DesktopController(bool demo, bool requested, QObject *parent)
         return;
     }
     const bool wayland = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland" || !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
-    const auto desktops = qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(':', Qt::SkipEmptyParts);
-    m_ddeSession = !wayland && desktops.contains("DDE", Qt::CaseInsensitive);
+    const auto desktops = (qEnvironmentVariable("XDG_CURRENT_DESKTOP") + ':'
+        + qEnvironmentVariable("XDG_SESSION_DESKTOP") + ':'
+        + qEnvironmentVariable("DESKTOP_SESSION")).split(':', Qt::SkipEmptyParts);
+    const bool dde = desktops.contains("DDE", Qt::CaseInsensitive)
+        || desktops.contains("deepin", Qt::CaseInsensitive);
+    m_ddeSession = !wayland && dde;
     const auto sessionBus = QDBusConnection::sessionBus();
     const bool ddeWaylandRegistered = wayland && sessionBus.interface()
         && sessionBus.interface()->isServiceRegistered("com.deepin.daemon.KWayland").value();
-    m_ddeWaylandSession = wayland && (desktops.contains("DDE", Qt::CaseInsensitive)
-        || ddeWaylandRegistered);
+    m_ddeWaylandSession = wayland && (dde || ddeWaylandRegistered);
     const auto root = xcb_setup_roots_iterator(xcb_get_setup(conn)).data->root;
     m_rootWindow = root;
     auto *reply = xcb_get_property_reply(conn,
