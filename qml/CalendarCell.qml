@@ -51,7 +51,9 @@ Rectangle {
                 Text {
                     anchors.fill: parent; anchors.leftMargin: 7; anchors.rightMargin: 5
                     verticalAlignment: Text.AlignVCenter
-                    text: (modelData.allDay ? "" : modelData.start + "  ") + modelData.title
+                    text: (modelData.recurring ? "↻ " : "")
+                        + (modelData.date < cell.info.date ? "续  " : modelData.allDay ? (modelData.displayEndDate > modelData.date ? "跨天  " : "") : modelData.start + "  ")
+                        + modelData.title
                     elide: Text.ElideRight
                     font.pixelSize: 11
                     color: Theme.dark ? Qt.lighter(modelData.color,1.6) : Qt.darker(modelData.color,1.08)

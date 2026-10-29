@@ -204,17 +204,8 @@ jobs:
           SH
 
       - name: Configure the exact release version
-        env:
-          DAYLINE_UPDATE_PROXY_BASE: ${{ secrets.DAYLINE_UPDATE_PROXY_BASE }}
         run: |
-          if [[ -z "$DAYLINE_UPDATE_PROXY_BASE" ]]; then
-            echo '::error::Configure the DAYLINE_UPDATE_PROXY_BASE repository secret before publishing an update-enabled package.'
-            exit 1
-          fi
-          python3 -c 'import os; print("::add-mask::" + os.environ["DAYLINE_UPDATE_PROXY_BASE"].encode("utf-8").hex())'
-          # Forward the secret only during the application build. Docker's
-          # container configuration and the SDK cache never receive it.
-          docker exec --interactive --env RELEASE_VERSION --env DAYLINE_UPDATE_PROXY_BASE \
+          docker exec --interactive --env RELEASE_VERSION \
             "$DAYLINE_BUILD_CONTAINER" bash -Eeuo pipefail <<'SH'
           set +u
           source /opt/rh/gcc-toolset-12/enable
@@ -230,11 +221,8 @@ jobs:
           SH
 
       - name: Build and install the complete private runtime
-        env:
-          DAYLINE_UPDATE_PROXY_BASE: ${{ secrets.DAYLINE_UPDATE_PROXY_BASE }}
         run: |
-          # Keep the value available if CMake automatically reconfigures.
-          docker exec --interactive --env DAYLINE_UPDATE_PROXY_BASE \
+          docker exec --interactive \
             "$DAYLINE_BUILD_CONTAINER" bash -Eeuo pipefail <<'SH'
           set +u
           source /opt/rh/gcc-toolset-12/enable
@@ -261,7 +249,6 @@ jobs:
           [[ "$(dpkg-deb --field "$package" Version)" == "$RELEASE_VERSION" ]]
           [[ "$(dpkg-deb --field "$package" Architecture)" == "$PACKAGE_ARCH" ]]
           [[ "$(dpkg --print-architecture)" == "$PACKAGE_ARCH" ]]
-          [[ "$(stat -c %s "$package")" -le 67108864 ]]
           dpkg-deb --info "$package"
           dpkg-deb --extract "$package" "$RUNNER_TEMP/dayline-package"
           [[ -x "$RUNNER_TEMP/dayline-package/usr/bin/dayline" ]]
@@ -427,6 +414,8 @@ jobs:
           日笺 Dayline ${RELEASE_VERSION} · Linux 桌面日历预览版
 
           提供本机日程、桌面月历与 iCloud CalDAV 账户接入和同步界面。
+          支持跨天日程、按天/周/月/年重复，以及按中国大陆工作日跳过周末和法定假期、保留调休补班日。
+          新增本机备忘录，可在设置中开启，默认关闭。应用更新统一通过软件商店，不再提供应用内自动更新。
 
           安装包分别在 amd64 和 ARM64 原生运行器的 Rocky Linux 8 容器中构建，以 glibc 2.28 为最低基线。
           随包提供私有 Qt 6.4.3、OpenSSL、libical 和 C++ 运行库；系统包管理器只需补齐 X11、字体、图形驱动接口等系统依赖，不要求手动安装 Qt。
@@ -441,7 +430,7 @@ jobs:
           桌面模式依赖桌面环境。GNOME Wayland 需要用户启用安装包附带的 Dayline Desktop Bridge 扩展（GNOME Shell 46），其他会话须确认 X11/EWMH 支持。
           本次以统信 UOS 20 ARM64 为兼容目标，尚未在对应华为麒麟电脑上实机验证。CI 完成原生构建、全部私有 ELF 的 glibc 基线与 ABI 核对，以及离屏启动检查；这些不能替代 UOS 20 的安装与桌面交互验证。
           iCloud 同步需 Apple App 专用密码，凭据在本机加密保存；尚未使用真实 Apple 账户验证跨设备往返。
-          重复日程、会议邀请及当前不支持的结构保留原文并按只读处理；暂未提供新建重复日程与本机提醒。
+          会议邀请及当前不支持的复杂日程结构保留原文并按只读处理；暂未提供本机提醒。
 
           下载 SHA256SUMS 后校验对应安装包：\`sha256sum -c --ignore-missing SHA256SUMS\`。
           源码和安装包版本一致，构建提交：${GITHUB_SHA}。

@@ -40,16 +40,15 @@ if(DAYLINE_BUNDLE_RUNTIME)
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 endif()
 
-string(HEX "$ENV{DAYLINE_UPDATE_PROXY_BASE}" DAYLINE_UPDATE_PROXY_HEX)
-configure_file(src/updateconfig.h.in generated/updateconfig.h @ONLY)
-unset(DAYLINE_UPDATE_PROXY_HEX)
-
 qt_add_executable(dayline src/main.cpp src/calendarstore.cpp src/calendarstore.h
     src/desktopcontroller.cpp src/desktopcontroller.h
     src/secretstore.cpp src/secretstore.h
     src/icalresource.cpp src/icalresource.h
-    src/icloudsync.cpp src/icloudsync.h
-    src/updatechecker.cpp src/updatechecker.h)
+    src/workdaycalendar.cpp src/workdaycalendar.h
+    src/icloudsync.cpp src/icloudsync.h)
+qt_add_resources(dayline holiday_data
+    PREFIX "/dayline"
+    FILES assets/holidays/china.json)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(dayline
     URI Dayline
@@ -80,10 +79,14 @@ qt_add_qml_module(dayline
         qml/CalendarCell.qml
         qml/MonthGrid.qml
         qml/EventEditor.qml
+        qml/RecurrenceEditor.qml
+        qml/EditorGroup.qml
+        qml/EditorRow.qml
+        qml/MemoPanel.qml
+        qml/MemoEditor.qml
         qml/ICloudSettings.qml
-        qml/UpdateSettings.qml
 )
-target_include_directories(dayline PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/generated ${XCB_INCLUDE_DIR} ${ICAL_INCLUDE_DIR})
+target_include_directories(dayline PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${XCB_INCLUDE_DIR} ${ICAL_INCLUDE_DIR})
 target_compile_definitions(dayline PRIVATE DAYLINE_VERSION="${PROJECT_VERSION}")
 target_link_libraries(dayline PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql Qt6::DBus Qt6::Network OpenSSL::Crypto ${XCB_LIBRARY} ${ICAL_LIBRARY})
 if(DAYLINE_BUNDLE_RUNTIME)

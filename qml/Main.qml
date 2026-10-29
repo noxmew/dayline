@@ -18,7 +18,7 @@ ApplicationWindow {
 
     function openNewEvent() { editor.create(calendarStore.selectedDate) }
     function openICloud() { cloudDialog.open() }
-    function openUpdates() { updateDialog.open() }
+    onClosing: function(close) { close.accepted = calendarStore.saveMemo() }
     Shortcut { sequence: "Ctrl+N"; onActivated: window.openNewEvent() }
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequence: "PgUp"; onActivated: calendarStore.changeMonth(-1) }
@@ -178,7 +178,6 @@ ApplicationWindow {
                 RowLayout {
                     Layout.topMargin: 18; Layout.fillWidth: true; spacing: 4
                     ActionButton { iconName: "settings"; text: "偏好设置"; quiet: true; onClicked: settingsDialog.open() }
-                    ActionButton { iconName: "refresh"; hint: "检查更新"; Accessible.name: "检查更新"; quiet: true; implicitWidth: 32; onClicked: window.openUpdates() }
                     Item { Layout.fillWidth: true }
                     ActionButton { iconName: Theme.dark ? "sun" : "moon"; hint: Theme.dark ? "浅色外观" : "深色外观"; quiet: true; onClicked: calendarStore.darkMode = !calendarStore.darkMode }
                 }
@@ -232,6 +231,11 @@ ApplicationWindow {
                         ActionButton { iconName: "right"; hint: "下个月"; quiet: true; onClicked: calendarStore.changeMonth(1) }
                     }
                 }
+                MemoPanel {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 16
+                    originWindow: window
+                }
                 Rectangle {
                     visible: !window.showingList
                     Layout.fillWidth: true; Layout.fillHeight: true
@@ -277,7 +281,7 @@ ApplicationWindow {
                             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.line }
                             RowLayout {
                                 anchors.fill: parent; anchors.margins: 12; spacing: 16
-                                Text { text: modelData.dateLabel; Layout.preferredWidth: 118; color: Theme.secondary; font.pixelSize: 11 }
+                                Text { text: modelData.dateLabel; Layout.preferredWidth: 118; color: Theme.secondary; font.pixelSize: 11; elide: Text.ElideRight }
                                 Rectangle { width: 3; height: 36; radius: 2; color: modelData.color }
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 7
@@ -361,9 +365,10 @@ ApplicationWindow {
                                 Column {
                                     anchors.fill: parent; anchors.margins: 15; spacing: 10
                                     Row {
+                                        width: parent.width
                                         spacing: 7
                                         Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: dayCard.modelData.color }
-                                        Text { text: dayCard.modelData.timeRange; color: Theme.secondary; font.pixelSize: 10 }
+                                        Text { width: parent.width - 13; text: dayCard.modelData.timeRange; color: Theme.secondary; font.pixelSize: 10; elide: Text.ElideRight }
                                     }
                                     Text { width: parent.width; text: dayCard.modelData.title; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium; elide: Text.ElideRight }
                                     Text { width: parent.width; text: dayCard.modelData.notes.length ? dayCard.modelData.notes : dayCard.modelData.calendarName + "日历"; color: Theme.muted; font.pixelSize: 10; elide: Text.ElideRight }
@@ -409,7 +414,6 @@ ApplicationWindow {
     EventEditor { id: editor; originWindow: window }
 
     ICloudSettings { id: cloudDialog; originWindow: window }
-    UpdateSettings { id: updateDialog; originWindow: window }
 
     Dialog {
         id: calendarDialog
@@ -623,6 +627,22 @@ ApplicationWindow {
                         Toggle { checked: calendarStore.darkMode; onToggled: calendarStore.darkMode = checked; Accessible.name: "深色外观" }
                     }
                 }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 76
+                    radius: 12; color: Theme.input; border.color: Theme.line
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 16
+                        spacing: 12
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 5
+                            Text { text: "显示备忘录"; color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { Layout.fillWidth: true; text: "在月历上方显示，关闭后保留内容"; color: Theme.secondary; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        }
+                        Toggle { checked: calendarStore.memoEnabled; onToggled: calendarStore.memoEnabled = checked; Accessible.name: "显示备忘录" }
+                    }
+                }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 10
                     RowLayout {
@@ -680,7 +700,6 @@ ApplicationWindow {
                 }
                 ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }
                 Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
-                ActionButton { text: "检查更新"; iconName: "refresh"; onClicked: { settingsDialog.close(); window.openUpdates() } }
                 RowLayout {
                     Layout.fillWidth: true
                     Text { text: "日笺 · Dayline"; color: Theme.secondary; font.pixelSize: 11 }

@@ -5,6 +5,7 @@
 #include <QSettings>
 #include <QSet>
 #include <QSqlDatabase>
+#include <QTimer>
 #include <QVariantList>
 
 class ICloudSync;
@@ -32,6 +33,11 @@ class CalendarStore final : public QObject
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY darkModeChanged)
     Q_PROPERTY(bool demo READ demo CONSTANT)
+    Q_PROPERTY(bool memoEnabled READ memoEnabled WRITE setMemoEnabled NOTIFY memoEnabledChanged)
+    Q_PROPERTY(QString memo READ memo WRITE setMemo NOTIFY memoChanged)
+    Q_PROPERTY(bool memoSavePending READ memoSavePending NOTIFY memoSaveStateChanged)
+    Q_PROPERTY(QString memoError READ memoError NOTIFY memoSaveStateChanged)
+    Q_PROPERTY(QString workdayCoverage READ workdayCoverage CONSTANT)
 
 public:
     explicit CalendarStore(bool demo, QObject *parent = nullptr);
@@ -60,7 +66,15 @@ public:
     bool darkMode() const { return m_settings.value("appearance/dark", false).toBool(); }
     void setDarkMode(bool dark);
     bool demo() const { return m_demo; }
+    bool memoEnabled() const { return m_settings.value("memo/enabled", false).toBool(); }
+    void setMemoEnabled(bool enabled);
+    QString memo() const { return m_memo; }
+    void setMemo(const QString &text);
+    bool memoSavePending() const { return m_memoSavePending; }
+    QString memoError() const { return m_memoError; }
+    QString workdayCoverage() const;
 
+    Q_INVOKABLE bool saveMemo();
     Q_INVOKABLE void changeMonth(int offset);
     Q_INVOKABLE void goToday();
     Q_INVOKABLE void selectDate(const QString &date);
@@ -69,7 +83,7 @@ public:
     Q_INVOKABLE bool deleteCalendar(const QString &id, const QString &targetId);
     Q_INVOKABLE QString eventCalendar(const QString &id) const;
     Q_INVOKABLE bool saveEvent(const QVariantMap &event);
-    Q_INVOKABLE bool deleteEvent(const QString &id);
+    Q_INVOKABLE bool deleteEvent(const QString &id, const QString &recurrenceId = QString());
     Q_INVOKABLE void clearError();
 
 signals:
@@ -77,6 +91,9 @@ signals:
     void selectionChanged();
     void errorChanged();
     void darkModeChanged();
+    void memoEnabledChanged();
+    void memoChanged();
+    void memoSaveStateChanged();
 
 private:
     void reload();
@@ -95,5 +112,9 @@ private:
     QSet<QString> m_enabled;
     QString m_search;
     QString m_error;
+    QString m_memo = QStringLiteral("");
+    QString m_memoError;
+    bool m_memoSavePending = false;
+    QTimer m_memoSaveTimer;
     ICloudSync *m_icloud = nullptr;
 };

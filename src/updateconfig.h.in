@@ -1,4 +1,0 @@
-#pragma once
-
-// Generated in the build directory from the release environment.
-#define DAYLINE_UPDATE_PROXY_HEX "@DAYLINE_UPDATE_PROXY_HEX@"

@@ -22,6 +22,12 @@ SurfaceMenu {
         checked: calendarStore.darkMode
         onToggled: calendarStore.darkMode = checked
     }
+    MenuToggle {
+        text: "显示备忘录"
+        iconName: "note"
+        checked: calendarStore.memoEnabled
+        onToggled: calendarStore.memoEnabled = checked
+    }
     MenuRule { }
     Item {
         implicitWidth: 270

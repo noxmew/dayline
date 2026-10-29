@@ -39,7 +39,7 @@ public:
     int pendingCount() const;
     QVariantList events(const QDate &from, const QDate &until) const;
     bool saveEvent(const QVariantMap &fields, QString *error);
-    bool deleteEvent(const QString &id, QString *error);
+    bool deleteEvent(const QString &id, const QString &recurrenceId, QString *error);
 
     Q_INVOKABLE void connectAccount(const QString &account, const QString &password, const QString &region);
     Q_INVOKABLE void sync();

@@ -88,9 +88,8 @@ QString normalized(const QUrl &url) { return url.adjusted(QUrl::NormalizePathSeg
 QString details(const QByteArray &raw)
 {
     if (!ICalResource::canEdit(raw)) return "此日程含暂不支持的内容或无法完整读取，无法在日笺中编辑。";
-    const auto items = ICalResource::occurrences(raw, QDate(1,1,1), QDate(9999,12,31));
-    if (items.isEmpty()) return {};
-    const auto e = items.first().toMap();
+    const auto e = ICalResource::fields(raw);
+    if (e.isEmpty()) return {};
     return e.value("date").toString() + " " + (e.value("allDay").toBool() ? QString("全天") : e.value("start").toString() + "—" + e.value("end").toString()) +
         "\n结束日期：" + e.value("endDate").toString() + "\n地点：" + e.value("location").toString() + "\n备注：" + e.value("notes").toString();
 }
@@ -580,12 +579,17 @@ bool ICloudSync::saveEvent(const QVariantMap &fields, QString *error)
     if (!ok || !m_db.commit()) { m_db.rollback(); *error = "无法保存日程和同步状态。"; return false; }
     emit dataChanged(); emit changed(); queueSync(); return true;
 }
-bool ICloudSync::deleteEvent(const QString &id, QString *error)
+bool ICloudSync::deleteEvent(const QString &id, const QString &recurrenceId, QString *error)
 {
     QSqlQuery q(m_db); q.prepare("SELECT r.pending,r.uncertain,r.conflict,r.raw,c.writable,c.available FROM icloud_resources r JOIN icloud_calendars c ON c.id=r.calendar WHERE r.id=?"); q.addBindValue(id); q.exec();
     if (!q.next() || q.value(1).toBool() || q.value(2).toBool() || !q.value(4).toBool() || !q.value(5).toBool()) { *error = "日程正在同步、存在冲突或日历不可写，暂不能删除。"; return false; }
     if (!ICalResource::canEdit(q.value(3).toByteArray())) { *error = "此日程含当前不支持的结构，只能查看。"; return false; }
-    const bool ok = q.value(0).toString() == "create" ? sql("DELETE FROM icloud_resources WHERE id=?", {id}) : sql("UPDATE icloud_resources SET pending='delete' WHERE id=?", {id});
+    bool ok;
+    if (!recurrenceId.isEmpty()) {
+        const auto raw = ICalResource::exclude(q.value(3).toByteArray(), recurrenceId, error);
+        if (raw.isEmpty()) return false;
+        ok = sql("UPDATE icloud_resources SET raw=?,pending=CASE WHEN pending='create' THEN 'create' ELSE 'update' END,error='' WHERE id=?", {raw,id});
+    } else ok = q.value(0).toString() == "create" ? sql("DELETE FROM icloud_resources WHERE id=?", {id}) : sql("UPDATE icloud_resources SET pending='delete' WHERE id=?", {id});
     if (!ok) { *error = "无法保存删除操作。"; return false; }
     emit dataChanged(); emit changed(); queueSync(); return true;
 }

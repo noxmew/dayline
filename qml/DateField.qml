@@ -7,6 +7,7 @@ ActionButton {
     id: field
     property string value: Qt.formatDate(new Date(), "yyyy-MM-dd")
     property bool readOnly: false
+    property bool compact: false
     property string label: "日期"
     readonly property bool pickerVisible: picker.visible
     readonly property date selectedDate: new Date(value + "T12:00:00")
@@ -23,6 +24,7 @@ ActionButton {
         id: dateContent
         spacing: 8
         Icon {
+            visible: !field.compact
             name: "calendar"
             Layout.preferredWidth: 17; Layout.preferredHeight: 17
             Layout.alignment: Qt.AlignVCenter
@@ -32,14 +34,15 @@ ActionButton {
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0
             text: field.text
             font.pixelSize: 13
-            color: Theme.text
+            color: field.compact && !field.readOnly ? Theme.accent : Theme.text
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
         }
     }
     background: Rectangle {
         radius: 9
-        color: field.hovered ? Theme.hover : Theme.input
+        color: field.hovered ? Theme.hover : field.compact ? Theme.panel : Theme.input
+        border.width: !field.compact || field.visualFocus || picker.visible ? 1 : 0
         border.color: field.visualFocus || picker.visible ? Theme.accent : Theme.lineStrong
     }
 

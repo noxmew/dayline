@@ -24,7 +24,6 @@ ApplicationWindow {
     onVisibleChanged: if (visible) calendarStore.searchQuery = ""
 
     function openNewEvent() { editor.create(calendarStore.selectedDate) }
-    function openUpdates() { updateDialog.open() }
 
     component GeometryHandle: MouseArea {
         property bool resizing: false
@@ -89,6 +88,13 @@ ApplicationWindow {
                     onClicked: appearanceMenu.popup(appearanceButton, appearanceButton.width - appearanceMenu.width, appearanceButton.height + 8)
                 }
             }
+            }
+
+            MemoPanel {
+                Layout.fillWidth: true
+                Layout.topMargin: 12
+                originWindow: desktop
+                desktopStyle: true
             }
 
             Row {
@@ -160,11 +166,9 @@ ApplicationWindow {
         MenuEntry { text: "桌面外观"; iconName: "settings"; onTriggered: appearanceMenu.popup() }
         MenuEntry { text: "锁定位置"; iconName: desktopController.locked ? "lock" : "unlock"; checkable: true; checked: desktopController.locked; onTriggered: desktopController.locked = !desktopController.locked }
         MenuEntry { text: "返回窗口模式"; iconName: "desktop"; onTriggered: desktopController.enabled = false }
-        MenuEntry { text: "检查更新"; iconName: "refresh"; onTriggered: desktop.openUpdates() }
         MenuRule { }
-        MenuEntry { text: "退出日笺"; iconName: "power"; danger: true; onTriggered: Qt.quit() }
+        MenuEntry { text: "退出日笺"; iconName: "power"; danger: true; onTriggered: { if (calendarStore.saveMemo()) Qt.quit() } }
     }
 
     EventEditor { id: editor; originWindow: desktop }
-    UpdateSettings { id: updateDialog; originWindow: desktop }
 }

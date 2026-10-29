@@ -1,37 +1,37 @@
 import QtQuick
-import QtQuick.Layouts
 import Dayline 1.0
 
-RowLayout {
+Field {
     id: field
-    property string value: "09:00"
-    property bool readOnly: false
+    property alias value: field.text
     property string label: "时间"
-    readonly property bool pickerVisible: hourField.popup.visible || minuteField.popup.visible
-    spacing: 6
-    function closePicker() {
-        hourField.popup.close()
-        minuteField.popup.close()
+    text: "09:00"
+    implicitWidth: 78
+    implicitHeight: 42
+    horizontalAlignment: TextInput.AlignHCenter
+    inputMask: "99:99"
+    inputMethodHints: Qt.ImhTime
+    validator: RegularExpressionValidator { regularExpression: /([01][0-9]|2[0-3]):[0-5][0-9]/ }
+    color: readOnly ? Theme.text : Theme.accent
+    Accessible.name: label + "，" + text
+    Accessible.description: "输入小时和分钟，按上下方向键调整"
+    function adjust(amount) {
+        if (readOnly || !acceptableInput) return
+        const position = cursorPosition
+        const hours = position < 3
+        let part = Number(text.slice(hours ? 0 : 3, hours ? 2 : 5))
+        const limit = hours ? 24 : 60
+        part = (part + amount + limit) % limit
+        text = hours ? String(part).padStart(2, "0") + text.slice(2)
+                     : text.slice(0, 3) + String(part).padStart(2, "0")
+        select(hours ? 0 : 3, hours ? 2 : 5)
     }
-
-    SelectField {
-        id: hourField
-        Layout.fillWidth: true
-        model: Array.from({length: 24}, (_, hour) => String(hour).padStart(2, "0"))
-        currentIndex: Number(field.value.slice(0, 2))
-        displayText: currentText + " 时"
-        enabled: !field.readOnly
-        Accessible.name: field.label + "（小时）"
-        onActivated: field.value = currentText + ":" + minuteField.currentText
-    }
-    SelectField {
-        id: minuteField
-        Layout.fillWidth: true
-        model: Array.from({length: 60}, (_, minute) => String(minute).padStart(2, "0"))
-        currentIndex: Number(field.value.slice(3, 5))
-        displayText: currentText + " 分"
-        enabled: !field.readOnly
-        Accessible.name: field.label + "（分钟）"
-        onActivated: field.value = hourField.currentText + ":" + currentText
+    Keys.onUpPressed: adjust(1)
+    Keys.onDownPressed: adjust(-1)
+    background: Rectangle {
+        radius: 9
+        color: field.hovered ? Theme.hover : Theme.panel
+        border.width: field.activeFocus ? 1 : 0
+        border.color: Theme.accent
     }
 }
