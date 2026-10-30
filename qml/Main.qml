@@ -698,6 +698,7 @@ ApplicationWindow {
                         }
                     }
                 }
+                McpSettings { Layout.fillWidth: true }
                 ActionButton { text: "iCloud 账户与同步"; iconName: "cloud"; onClicked: { settingsDialog.close(); cloudDialog.open() } }
                 Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
                 RowLayout {

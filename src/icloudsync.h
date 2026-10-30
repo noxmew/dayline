@@ -37,8 +37,10 @@ public:
     QVariantList calendars() const;
     QVariantList conflicts() const;
     int pendingCount() const;
-    QVariantList events(const QDate &from, const QDate &until) const;
-    bool saveEvent(const QVariantMap &fields, QString *error);
+    QVariantList events(const QDate &from, const QDate &until, bool allCalendars = false,
+                        QString *error = nullptr, const QStringList &calendarIds = {}) const;
+    QVariantMap event(const QString &id, const QString &recurrenceId, QString *error) const;
+    bool saveEvent(const QVariantMap &fields, QString *error, QString *savedId = nullptr);
     bool deleteEvent(const QString &id, const QString &recurrenceId, QString *error);
 
     Q_INVOKABLE void connectAccount(const QString &account, const QString &password, const QString &region);

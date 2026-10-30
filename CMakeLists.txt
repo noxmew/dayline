@@ -41,6 +41,7 @@ if(DAYLINE_BUNDLE_RUNTIME)
 endif()
 
 qt_add_executable(dayline src/main.cpp src/calendarstore.cpp src/calendarstore.h
+    src/mcpserver.cpp src/mcpserver.h src/mcptools.cpp src/mcptools.h
     src/desktopcontroller.cpp src/desktopcontroller.h
     src/secretstore.cpp src/secretstore.h
     src/icalresource.cpp src/icalresource.h
@@ -84,6 +85,7 @@ qt_add_qml_module(dayline
         qml/EditorRow.qml
         qml/MemoPanel.qml
         qml/MemoEditor.qml
+        qml/McpSettings.qml
         qml/ICloudSettings.qml
 )
 target_include_directories(dayline PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${XCB_INCLUDE_DIR} ${ICAL_INCLUDE_DIR})

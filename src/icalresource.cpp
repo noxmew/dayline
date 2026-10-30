@@ -11,6 +11,25 @@
 namespace {
 using Component = std::unique_ptr<icalcomponent, decltype(&icalcomponent_free)>;
 Component parse(const QByteArray &raw) { return {icalparser_parse_string(raw.constData()), icalcomponent_free}; }
+icaltimetype zonedTime(time_t seconds, int isDate, const icaltimezone *zone)
+{
+    auto value = icaltime_from_timet_with_zone(seconds, isDate, zone);
+    // Wall-time conversion and the native zone marker must agree before a
+    // property or recurrence identifier is serialized.
+    icaltime_set_timezone(&value, zone);
+    return value;
+}
+icalcomponent *timezoneDefinition(icaltimezone *zone)
+{
+    auto *component = icaltimezone_get_component(zone);
+    if (!component) return nullptr;
+    auto *copy = icalcomponent_new_clone(component);
+    // System tzdata's initial LMT observance can have a null DTSTART. Bound
+    // the definition to representable calendar years so its initial offset
+    // has a valid DTSTART, retaining all subsequent transitions and rules.
+    icaltimezone_truncate_vtimezone(copy, icaltime_from_string("00010101T000000Z"), icaltime_null_time(), 0);
+    return copy;
+}
 QVariantMap recurrenceFields(icalcomponent *root, icalcomponent *event, bool *supported = nullptr);
 void recurrenceParameters(icalcomponent *master, icalproperty *property);
 constexpr const char *WorkdaysProperty = "X-DAYLINE-WORKDAYS";
@@ -88,14 +107,17 @@ QString property(icalcomponent *event, icalproperty_kind kind)
     default: return {};
     }
 }
-icaltimezone *componentTimezone(icalcomponent *root, icalcomponent *event, icalproperty_kind kind)
+icaltimezone *propertyTimezone(icalcomponent *root, icalproperty *p)
 {
-    auto *p = icalcomponent_get_first_property(event, kind);
     auto *tz = p ? icalproperty_get_first_parameter(p, ICAL_TZID_PARAMETER) : nullptr;
     if (!tz) return nullptr;
     const char *id = icalparameter_get_tzid(tz);
     auto *zone = icalcomponent_get_timezone(root, id);
     return zone ? zone : icaltimezone_get_builtin_timezone(id);
+}
+icaltimezone *componentTimezone(icalcomponent *root, icalcomponent *event, icalproperty_kind kind)
+{
+    return propertyTimezone(root, icalcomponent_get_first_property(event, kind));
 }
 // Resolve every referenced zone before expansion. An unknown TZID must never
 // silently become a floating time. Builtin definitions are attached only to
@@ -115,8 +137,9 @@ bool prepareZones(icalcomponent *root)
         const auto name = id.toUtf8();
         if (icalcomponent_get_timezone(root, name.constData())) continue;
         auto *zone = icaltimezone_get_builtin_timezone(name.constData());
-        if (!zone || !icaltimezone_get_component(zone)) return false;
-        auto *definition = icalcomponent_new_clone(icaltimezone_get_component(zone));
+        if (!zone) return false;
+        auto *definition = timezoneDefinition(zone);
+        if (!definition) return false;
         auto *tzid = icalcomponent_get_first_property(definition, ICAL_TZID_PROPERTY);
         if (!tzid) { icalcomponent_free(definition); return false; }
         icalproperty_set_tzid(tzid, name.constData());
@@ -151,7 +174,7 @@ bool editable(icalcomponent *root, icalcomponent *event)
         for (auto kind : {ICAL_DTSTART_PROPERTY, ICAL_DTEND_PROPERTY, ICAL_RECURRENCEID_PROPERTY, ICAL_EXDATE_PROPERTY}) {
             for (auto *p = icalcomponent_get_first_property(item, kind); p;
                  p = icalcomponent_get_next_property(item, kind)) {
-                if (icalproperty_get_first_parameter(p, ICAL_TZID_PARAMETER) && !componentTimezone(root, item, kind)) return false;
+                if (icalproperty_get_first_parameter(p, ICAL_TZID_PARAMETER) && !propertyTimezone(root, p)) return false;
             }
         }
     }
@@ -287,8 +310,8 @@ void occurrence(icalcomponent *, icaltime_span *span, void *context)
     QDateTime start = QDateTime::fromSecsSinceEpoch(span->start, Qt::UTC);
     QDateTime end = QDateTime::fromSecsSinceEpoch(span->end, Qt::UTC);
     if (x->allDay || x->floating) {
-        const auto first = icaltime_from_timet_with_zone(span->start, x->allDay, x->zone);
-        const auto last = icaltime_from_timet_with_zone(span->end, x->allDay, x->zone);
+        const auto first = zonedTime(span->start, x->allDay, x->zone);
+        const auto last = zonedTime(span->end, x->allDay, x->zone);
         start = QDateTime(date(first), QTime(first.hour, first.minute, first.second));
         end = QDateTime(date(last), QTime(last.hour, last.minute, last.second));
     } else { start = start.toLocalTime(); end = end.toLocalTime(); }
@@ -300,7 +323,7 @@ void occurrence(icalcomponent *, icaltime_span *span, void *context)
     event["start"] = x->allDay ? "" : start.time().toString("HH:mm");
     event["end"] = x->allDay ? "" : end.time().toString("HH:mm");
     if (x->recurring)
-        event["recurrenceId"] = QString::fromUtf8(icaltime_as_ical_string(icaltime_from_timet_with_zone(span->start, x->allDay, x->zone)));
+        event["recurrenceId"] = QString::fromUtf8(icaltime_as_ical_string(zonedTime(span->start, x->allDay, x->zone)));
     x->result.append(event);
 }
 void replace(icalcomponent *event, icalproperty_kind kind, icalproperty *replacement)
@@ -354,8 +377,8 @@ icalproperty *timeProperty(icalcomponent *root, icalcomponent *event, icalproper
     } else {
         auto *zone = old && !previous.is_date ? componentTimezone(root, event, icalproperty_isa(old))
             : icaltimezone_get_builtin_timezone(QTimeZone::systemTimeZoneId().constData());
-        value = icaltime_from_timet_with_zone(QDateTime(day, time).toSecsSinceEpoch(), 0,
-                                              zone ? zone : icaltimezone_get_utc_timezone());
+        value = zonedTime(QDateTime(day, time).toSecsSinceEpoch(), 0,
+                          zone ? zone : icaltimezone_get_utc_timezone());
     }
     if (old && bool(previous.is_date) == allDay) {
         const auto displayed = localTime(root, event, previous, kind);
@@ -391,9 +414,8 @@ bool ensureLocalZone(icalcomponent *root, QString *error)
     auto *zone = icaltimezone_get_builtin_timezone(id.constData());
     if (!zone) { *error = "无法识别系统时区，请先检查系统时区设置。"; return false; }
     if (zone == icaltimezone_get_utc_timezone() || icalcomponent_get_timezone(root, id.constData())) return true;
-    auto *definition = icaltimezone_get_component(zone);
-    if (!definition) { *error = "无法读取系统时区的夏令时规则。"; return false; }
-    auto *copy = icalcomponent_new_clone(definition);
+    auto *copy = timezoneDefinition(zone);
+    if (!copy) { *error = "无法读取系统时区的夏令时规则。"; return false; }
     auto *tzid = icalcomponent_get_first_property(copy, ICAL_TZID_PROPERTY);
     if (!tzid) { icalcomponent_free(copy); *error = "系统时区定义缺少标识。"; return false; }
     icalproperty_set_tzid(tzid, id.constData());
@@ -536,7 +558,8 @@ bool containsOccurrence(icalcomponent *root, icalcomponent *master, const QStrin
 {
     if (auto *event = findOverride(root, id)) return icalcomponent_get_status(event) != ICAL_STATUS_CANCELLED;
     const auto value = recurrenceTime(root, master, id);
-    if (icaltime_is_null_time(value) || !icalcomponent_get_first_property(master, ICAL_RRULE_PROPERTY)) return false;
+    if (icaltime_is_null_time(value) || (!icalcomponent_get_first_property(master, ICAL_RRULE_PROPERTY) &&
+        !icalcomponent_get_first_property(master, ICAL_RDATE_PROPERTY))) return false;
     struct Match { time_t start; bool found = false; } match {icaltime_as_timet_with_zone(value, startZone(root, master))};
     const auto from = icaltime_from_timet_with_zone(match.start - 86400, 0, icaltimezone_get_utc_timezone());
     const auto until = icaltime_from_timet_with_zone(match.start + 86400, 0, icaltimezone_get_utc_timezone());
@@ -778,6 +801,43 @@ QVariantMap ICalResource::fields(const QByteArray &raw)
     if (!master) return {};
     auto result = eventFields(root.get(), master);
     result["recurrence"] = recurrenceFields(root.get(), master);
+    return result;
+}
+
+QVariantMap ICalResource::details(const QByteArray &raw, const QString &recurrenceId, QString *error)
+{
+    auto root = parse(raw);
+    auto *master = root ? masterEvent(root.get()) : nullptr;
+    if (!master || icalcomponent_count_errors(root.get()) || !prepareZones(root.get())) {
+        *error = "日程原始内容或时区无效，无法读取。"; return {};
+    }
+    auto series = eventFields(root.get(), master);
+    series["recurrence"] = recurrenceFields(root.get(), master);
+    series["hasExceptions"] = hasUserExceptions(root.get(), master);
+    auto result = series;
+    if (!recurrenceId.isEmpty()) {
+        if (!containsOccurrence(root.get(), master, recurrenceId)) {
+            *error = "这一次重复日程不存在或已删除，请重新查询。"; return {};
+        }
+        if (auto *item = findOverride(root.get(), recurrenceId)) result = eventFields(root.get(), item);
+        else {
+            const auto rid = recurrenceTime(root.get(), master, recurrenceId);
+            const auto finish = icaltime_add(rid, icaltime_subtract(eventEnd(master), icalcomponent_get_dtstart(master)));
+            const auto begin = localTime(root.get(), master, rid, ICAL_DTSTART_PROPERTY);
+            const auto end = localTime(root.get(), master, finish, ICAL_DTSTART_PROPERTY);
+            result["date"] = begin.date().toString(Qt::ISODate);
+            result["endDate"] = (rid.is_date ? end.date().addDays(-1) : end.date()).toString(Qt::ISODate);
+            result["start"] = rid.is_date ? "" : begin.time().toString("HH:mm");
+            result["end"] = rid.is_date ? "" : end.time().toString("HH:mm");
+        }
+    }
+    result["series"] = series;
+    result["recurrence"] = series.value("recurrence");
+    result["recurrenceId"] = recurrenceId;
+    result["recurring"] = bool(icalcomponent_get_first_property(master, ICAL_RRULE_PROPERTY) ||
+        icalcomponent_get_first_property(master, ICAL_RDATE_PROPERTY));
+    result["readOnly"] = !editable(root.get(), master);
+    result["readOnlyReason"] = result.value("readOnly").toBool() ? "此日程包含暂不支持的结构，只能查看。" : "";
     return result;
 }
 

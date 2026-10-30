@@ -1,6 +1,7 @@
 #include "calendarstore.h"
 #include "desktopcontroller.h"
 #include "icloudsync.h"
+#include "mcpserver.h"
 
 #include <QCommandLineParser>
 #include <QDir>
@@ -61,6 +62,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     store.attachICloud(&iCloud);
+    McpServer mcp(store);
     DesktopController desktop(parser.isSet("demo"), parser.isSet("desktop"));
     if (parser.isSet("desktop") && !desktop.supported()) {
         qCritical().noquote() << desktop.supportMessage();
@@ -71,6 +73,7 @@ int main(int argc, char *argv[])
     engine.addImportPath("qrc:/qt/qml");
     engine.rootContext()->setContextProperty("calendarStore", &store);
     engine.rootContext()->setContextProperty("iCloudSync", &iCloud);
+    engine.rootContext()->setContextProperty("mcpServer", &mcp);
     engine.rootContext()->setContextProperty("desktopController", &desktop);
     engine.load(QUrl("qrc:/qt/qml/Dayline/qml/Main.qml"));
     if (engine.rootObjects().isEmpty()) return 1;

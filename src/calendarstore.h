@@ -73,6 +73,10 @@ public:
     bool memoSavePending() const { return m_memoSavePending; }
     QString memoError() const { return m_memoError; }
     QString workdayCoverage() const;
+    QVariantList allCalendars() const;
+    QVariantList queryEvents(const QDate &from, const QDate &until, const QStringList &calendarIds, QString *error) const;
+    QVariantMap event(const QString &id, const QString &recurrenceId, QString *error) const;
+    bool writeEvent(const QVariantMap &event, QString *savedId);
 
     Q_INVOKABLE bool saveMemo();
     Q_INVOKABLE void changeMonth(int offset);
@@ -96,6 +100,7 @@ signals:
     void memoSaveStateChanged();
 
 private:
+    bool saveEventInternal(QVariantMap event, bool navigate, QString *savedId);
     void reload();
     void seedPreview();
     void setError(const QString &message);

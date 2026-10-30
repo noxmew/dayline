@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QColor>
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QJsonDocument>
 #include <QFileInfo>
 #include <QLocale>
 #include <QRegularExpression>
@@ -15,6 +17,23 @@
 #include <QTime>
 #include <QUuid>
 #include <algorithm>
+
+namespace {
+const auto localEventSelect = QStringLiteral(
+    "SELECT e.id,e.title,e.date,e.all_day,e.start_time,e.end_time,e.calendar,e.notes,c.color,c.name,c.id,s.raw "
+    "FROM events e LEFT JOIN local_calendars c ON c.id=e.calendar LEFT JOIN event_schedules s ON s.event_id=e.id ");
+QVariantMap localRecord(const QSqlQuery &query)
+{
+    QVariantMap event {{"id",query.value(0)}, {"title",query.value(1)}, {"date",query.value(2)},
+        {"allDay",query.value(3).toBool()}, {"start",query.value(4)}, {"end",query.value(5)},
+        {"calendar",query.value(6)}, {"notes",query.value(7)}, {"color",query.value(8)},
+        {"calendarName",query.value(9)}, {"endDate",query.value(2)}, {"location",QStringLiteral("")},
+        {"recurring",false}, {"recurrence",QVariantMap{{"frequency","none"}}}, {"readOnly",false}};
+    const auto content = query.value(11).isNull() ? QJsonDocument::fromVariant(event).toJson(QJsonDocument::Compact) : query.value(11).toByteArray();
+    event["revision"] = QString::fromLatin1(QCryptographicHash::hash(content + query.value(6).toString().toUtf8(), QCryptographicHash::Sha256).toHex());
+    return event;
+}
+}
 
 CalendarStore::CalendarStore(bool demo, QObject *parent)
     : QObject(parent), m_demo(demo),
@@ -30,6 +49,88 @@ CalendarStore::CalendarStore(bool demo, QObject *parent)
 }
 
 QString CalendarStore::workdayCoverage() const { return WorkdayCalendar::coverage(); }
+
+QVariantList CalendarStore::allCalendars() const
+{
+    QVariantList result;
+    for (const auto &value : m_localCalendars) {
+        auto item = value.toMap();
+        item["writable"] = true;
+        result.append(item);
+    }
+    if (m_icloud) for (const auto &value : m_icloud->calendars()) {
+        auto item = value.toMap();
+        item["writable"] = item.value("writable").toBool() && item.value("available").toBool() && item.value("selected").toBool();
+        result.append(item);
+    }
+    return result;
+}
+
+QVariantList CalendarStore::queryEvents(const QDate &from, const QDate &until, const QStringList &calendarIds, QString *error) const
+{
+    QSqlQuery query(m_db);
+    if (!query.exec(localEventSelect + "ORDER BY e.id")) { *error = "无法读取本机日程。"; return {}; }
+    QVariantList result;
+    while (query.next()) {
+        if (query.value(10).isNull()) { *error = "日程所属的本机日历不存在。"; return {}; }
+        const auto record = localRecord(query);
+        if (!calendarIds.isEmpty() && !calendarIds.contains(record.value("calendar").toString())) continue;
+        if (query.value(11).isNull()) result.append(record);
+        else {
+            const auto raw = query.value(11).toByteArray();
+            if (ICalResource::uid(raw) != record.value("id").toString()) { *error = "本机日程的系列标识不一致。"; return {}; }
+            const auto items = ICalResource::occurrences(raw, from, until, error);
+            if (!error->isEmpty()) return {};
+            for (const auto &value : items) {
+                auto item = value.toMap();
+                for (const auto &key : {"id", "calendar", "calendarName", "color", "revision"}) item[key] = record.value(key);
+                result.append(item);
+            }
+        }
+    }
+    if (m_icloud) {
+        result.append(m_icloud->events(from, until, true, error, calendarIds));
+        if (!error->isEmpty()) return {};
+    }
+    const QDateTime rangeStart(from, QTime(0,0)), rangeEnd(until, QTime(0,0));
+    result.erase(std::remove_if(result.begin(), result.end(), [&](const QVariant &value) {
+        const auto item = value.toMap();
+        if (!calendarIds.isEmpty() && !calendarIds.contains(item.value("calendar").toString())) return true;
+        const auto first = QDate::fromString(item.value("date").toString(), Qt::ISODate);
+        const auto last = QDate::fromString(item.value("endDate").toString(), Qt::ISODate);
+        const bool allDay = item.value("allDay").toBool();
+        const QDateTime start(first, allDay ? QTime(0,0) : QTime::fromString(item.value("start").toString(), "HH:mm"));
+        const QDateTime end(allDay ? last.addDays(1) : last, allDay ? QTime(0,0) : QTime::fromString(item.value("end").toString(), "HH:mm"));
+        return start >= rangeEnd || end <= rangeStart;
+    }), result.end());
+    std::sort(result.begin(), result.end(), [](const QVariant &a, const QVariant &b) {
+        const auto x = a.toMap(), y = b.toMap();
+        for (const auto &key : {"date", "start", "calendar", "id", "recurrenceId"}) {
+            if (x.value(key).toString() != y.value(key).toString()) return x.value(key).toString() < y.value(key).toString();
+        }
+        return false;
+    });
+    return result;
+}
+
+QVariantMap CalendarStore::event(const QString &id, const QString &recurrenceId, QString *error) const
+{
+    if (id.startsWith("icloud:") && m_icloud) return m_icloud->event(id, recurrenceId, error);
+    QSqlQuery query(m_db);
+    query.prepare(localEventSelect + "WHERE e.id=?"); query.addBindValue(id);
+    if (!query.exec() || !query.next() || query.value(10).isNull()) { *error = "日程不存在或所属日历无效。"; return {}; }
+    const auto record = localRecord(query);
+    if (query.value(11).isNull()) {
+        if (!recurrenceId.isEmpty()) { *error = "此日程不是重复日程。"; return {}; }
+        return record;
+    }
+    const auto raw = query.value(11).toByteArray();
+    if (ICalResource::uid(raw) != id) { *error = "本机日程的系列标识不一致。"; return {}; }
+    auto result = ICalResource::details(raw, recurrenceId, error);
+    if (result.isEmpty()) return {};
+    for (const auto &key : {"id", "calendar", "calendarName", "color", "revision"}) result[key] = record.value(key);
+    return result;
+}
 
 bool CalendarStore::initialize()
 {
@@ -474,12 +575,30 @@ void CalendarStore::clearError() { setError({}); }
 
 bool CalendarStore::saveEvent(const QVariantMap &event)
 {
+    return saveEventInternal(event, true, nullptr);
+}
+
+bool CalendarStore::writeEvent(const QVariantMap &event, QString *savedId)
+{
+    return saveEventInternal(event, false, savedId);
+}
+
+bool CalendarStore::saveEventInternal(QVariantMap event, bool navigate, QString *savedId)
+{
     clearError();
+    auto rule = event.value("recurrence").toMap();
+    if (rule.value("workdaysOnly").toBool() && rule.value("frequency", "none").toString() == "none") {
+        rule["frequency"] = "daily"; rule["interval"] = 1; rule["endMode"] = "until";
+        rule["until"] = event.value("endDate", event.value("date")); rule["weekStart"] = "MO";
+        event["recurrence"] = rule; event["endDate"] = event.value("date");
+    }
     if (event.value("calendar").toString().startsWith("icloud:") && m_icloud) {
         QString error;
-        if (!m_icloud->saveEvent(event, &error)) { setError(error); return false; }
-        m_selected = QDate::fromString(event.value("date").toString(), Qt::ISODate);
-        m_month = QDate(m_selected.year(), m_selected.month(), 1);
+        if (!m_icloud->saveEvent(event, &error, savedId)) { setError(error); return false; }
+        if (navigate) {
+            m_selected = QDate::fromString(event.value("date").toString(), Qt::ISODate);
+            m_month = QDate(m_selected.year(), m_selected.month(), 1);
+        }
         reload(); return true;
     }
     const QString calendar = event.value("calendar").toString();
@@ -531,8 +650,11 @@ bool CalendarStore::saveEvent(const QVariantMap &event)
         query.prepare("DELETE FROM event_schedules WHERE event_id=?"); query.addBindValue(id);
     }
     if (!query.exec() || !m_db.commit()) return reject("无法保存日程的时间和重复规则。");
-    m_selected = QDate::fromString(event.value("date").toString(), Qt::ISODate);
-    m_month = QDate(m_selected.year(), m_selected.month(), 1);
+    if (savedId) *savedId = id;
+    if (navigate) {
+        m_selected = QDate::fromString(event.value("date").toString(), Qt::ISODate);
+        m_month = QDate(m_selected.year(), m_selected.month(), 1);
+    }
     reload();
     return true;
 }
